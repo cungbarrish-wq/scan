@@ -35,7 +35,7 @@
     <!-- Loading Screen សម្រាប់រង់ចាំ OpenCV ដំណើរការ -->
     <div id="loadingScreen" class="fixed inset-0 bg-white z-[100] flex flex-col items-center justify-center">
         <i class="fa-solid fa-spinner fa-spin text-4xl text-blue-600 mb-4"></i>
-        <p class="text-gray-700 font-bold">កំពុងរៀបចំប្រព័ន្ធកាត់រូប...</p>
+        <p class="text-gray-700 font-bold mt-2">កំពុងរៀបចំប្រព័ន្ធកាត់រូប...</p>
         <p class="text-sm text-gray-500">(សូមរង់ចាំបន្តិច)</p>
     </div>
 
@@ -45,9 +45,10 @@
             <i class="fa-solid fa-bars"></i>
         </button>
         <h1 class="text-xl font-bold">DocScanner</h1>
-        <label class="cursor-pointer">
-            <i class="fa-solid fa-camera text-2xl"></i>
-            <input type="file" id="fileInput" accept="image/*" capture="environment" class="hidden">
+        <!-- ប៊ូតុងយករូបភាពថ្មី (អាចថត ឬយកពី Gallery) -->
+        <label class="cursor-pointer bg-blue-700 hover:bg-blue-800 px-3 py-1.5 rounded-lg flex items-center gap-2 shadow">
+            <i class="fa-solid fa-camera"></i> / <i class="fa-solid fa-image"></i>
+            <input type="file" id="fileInput" accept="image/*" class="hidden">
         </label>
     </div>
 
@@ -71,8 +72,8 @@
     <div class="flex-1 p-4 flex flex-col items-center justify-start overflow-y-auto relative">
         
         <div id="placeholder" class="text-gray-400 flex flex-col items-center justify-center h-full">
-            <i class="fa-solid fa-file-signature text-6xl mb-2"></i>
-            <p>សូមថត ឬជ្រើសរើសរូបភាពដើម្បីចាប់ផ្ដើម</p>
+            <i class="fa-solid fa-file-signature text-6xl mb-4"></i>
+            <p class="text-center">សូមថតរូប<br>ឬជ្រើសរើសរូបភាពពី Gallery</p>
         </div>
 
         <div id="workspace" class="hidden w-full max-w-md flex flex-col items-center">
@@ -80,8 +81,16 @@
             <p id="instructionText" class="text-sm text-gray-600 mb-2 font-bold">អូសចំណុចក្រហមឲ្យចំកែងឯកសារទាំង៤</p>
             
             <!-- Canvas សម្រាប់បង្ហាញរូប និងអូសកែង -->
-            <div class="relative bg-black rounded shadow-lg flex justify-center items-center">
+            <div class="relative bg-black rounded shadow-lg flex justify-center items-center select-none touch-none">
                 <canvas id="editorCanvas"></canvas>
+                
+                <!-- កែវពង្រីក (Loupe) សម្រាប់ពេលអូសចំណុចកាត់រូប -->
+                <div id="loupeContainer" class="hidden absolute pointer-events-none z-50 border-4 border-gray-300 rounded-full overflow-hidden shadow-xl bg-black" style="width: 100px; height: 100px; transform: translate(-50%, -130%);">
+                    <canvas id="loupeCanvas" width="100" height="100"></canvas>
+                    <!-- សញ្ញាបូកចំកណ្តាលកែវពង្រីក -->
+                    <div class="absolute top-1/2 left-1/2 w-4 h-0.5 bg-green-400 -translate-x-1/2 -translate-y-1/2"></div>
+                    <div class="absolute top-1/2 left-1/2 w-0.5 h-4 bg-green-400 -translate-x-1/2 -translate-y-1/2"></div>
+                </div>
             </div>
             
             <!-- Tools Menu -->
@@ -92,7 +101,7 @@
                 <button id="saveBtn" class="bg-green-500 text-white p-2 rounded shadow"><i class="fa-solid fa-floppy-disk block text-lg"></i> Save</button>
             </div>
             
-            <button id="resetCropBtn" class="mt-2 text-blue-600 underline text-sm hidden">ត្រឡប់ទៅកាត់ម្ដងទៀត</button>
+            <button id="resetCropBtn" class="mt-3 text-blue-600 underline text-sm hidden font-bold">ត្រឡប់ទៅកាត់ម្ដងទៀត</button>
         </div>
     </div>
 
@@ -110,6 +119,12 @@
         const ctx = canvas.getContext('2d');
         const sourceImage = document.getElementById('sourceImage');
         const outputCanvas = document.getElementById('outputCanvas');
+        
+        // កែវពង្រីក
+        const loupeContainer = document.getElementById('loupeContainer');
+        const loupeCanvas = document.getElementById('loupeCanvas');
+        const loupeCtx = loupeCanvas.getContext('2d');
+        
         let savedImages = [];
         let cvReady = false;
 
@@ -242,6 +257,17 @@
             });
         }
 
+        // មុខងារបង្ហាញកែវពង្រីក
+        function updateLoupe(pos) {
+            loupeContainer.classList.remove('hidden');
+            loupeContainer.style.left = pos.x + 'px';
+            loupeContainer.style.top = pos.y + 'px';
+            
+            loupeCtx.clearRect(0, 0, 100, 100);
+            // ចម្លងរូបពី Canvas ចំណុចកណ្តាលដៃ ទំហំ 50x50 មកដាក់លើកែវពង្រីក 100x100 (Zoom 2x)
+            loupeCtx.drawImage(canvas, pos.x - 25, pos.y - 25, 50, 50, 0, 0, 100, 100);
+        }
+
         // --- ផ្នែកបញ្ជាការអូស (Mouse & Touch Events) ---
         function getPos(e) {
             const rect = canvas.getBoundingClientRect();
@@ -255,10 +281,14 @@
 
         function handleStart(e) {
             if(isCropped) return;
-            e.preventDefault();
             const pos = getPos(e);
             // ស្វែងរកចំណុចដែលត្រូវនឹងកន្លែងចុច (រង្វង់ធំជាងបន្តិចងាយស្រួលចុចលើទូរស័ព្ទ)
             draggingPoint = corners.find(p => Math.hypot(p.x - pos.x, p.y - pos.y) < 30);
+            
+            if (draggingPoint) {
+                e.preventDefault();
+                updateLoupe(draggingPoint);
+            }
         }
 
         function handleMove(e) {
@@ -268,11 +298,14 @@
             // ការពារកុំឲ្យអូសចេញក្រៅ Canvas
             draggingPoint.x = Math.max(0, Math.min(canvas.width, pos.x));
             draggingPoint.y = Math.max(0, Math.min(canvas.height, pos.y));
-            drawEditor();
+            
+            drawEditor(); // គូររូបធំ
+            updateLoupe(draggingPoint); // គូរកែវពង្រីក
         }
 
         function handleEnd(e) {
             draggingPoint = null;
+            loupeContainer.classList.add('hidden'); // លាក់កែវពង្រីក
         }
 
         canvas.addEventListener('mousedown', handleStart);
@@ -290,7 +323,7 @@
             // ១. ទាញយករូបដើម (High Res) ចូលក្នុង OpenCV
             let src = cv.imread(sourceImage);
             
-            // ២. បំប្លែងកូអរដោនេពី Canvas តូច ទៅជារូបដើមធំ
+            // ២. បំប្លែងកូអរដោនេពី Canvas តូច ទៅជារូបដើមធំ (High Quality)
             let c = corners.map(p => ({ x: p.x / scaleRatio, y: p.y / scaleRatio }));
             
             // ៣. គណនាប្រវែងនិងទទឹងរបស់ឯកសារថ្មី (ចម្ងាយរវាងចំណុច)
@@ -316,7 +349,7 @@
             // ៥. អនុវត្តការទាញមុំ
             cv.warpPerspective(src, dst, M, dsize, cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar());
 
-            // ៦. បង្ហាញលទ្ធផលក្នុង outputCanvas
+            // ៦. បង្ហាញលទ្ធផលក្នុង outputCanvas (ទំហំធំ High Res)
             cv.imshow('outputCanvas', dst);
 
             // សម្អាតអង្គចងចាំ OpenCV
@@ -357,7 +390,7 @@
             drawEditor();
         });
 
-        // មុខងារ Save រូបភាពទុកក្នុង Frontend List
+        // មុខងារ Save រូបភាពទុកក្នុង Frontend List ជាគុណភាពខ្ពស់
         document.getElementById('saveBtn').addEventListener('click', async () => {
             if(!isCropped) return alert("សូមកាត់រូបឲ្យហើយសិន មុននឹង Save!");
             
@@ -369,8 +402,8 @@
             tmpCtx.filter = currentFilter;
             tmpCtx.drawImage(outputCanvas, 0, 0);
 
-            // បម្លែងទៅជា JPEG (គុណភាព 80% ដើម្បីកុំឲ្យធ្ងន់ពេកពេល Save ច្រើន)
-            const finalDataUrl = tmpCanvas.toDataURL('image/jpeg', 0.8);
+            // បម្លែងទៅជា JPEG (គុណភាព 95% ដើម្បីរក្សាភាពច្បាស់ High Quality)
+            const finalDataUrl = tmpCanvas.toDataURL('image/jpeg', 0.95);
             
             savedImages.push(finalDataUrl);
             await localforage.setItem('scannedDocs', savedImages);
