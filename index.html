@@ -136,6 +136,7 @@
         let draggingPoint = null; // ចំណុចដែលកំពុងត្រូវបានអូស
         let isCropped = false;
         let currentFilter = "none";
+        let editingIndex = null; // ចំណាំថាកំពុង Edit ទំព័រទីប៉ុន្មាន
 
         // --- ផ្នែករៀបចំ OpenCV ---
         function onOpenCvReady() {
@@ -162,6 +163,7 @@
             document.getElementById('fileInput').addEventListener('change', function(e) {
                 const file = e.target.files[0];
                 if (file) {
+                    editingIndex = null; // Reset ពេលយករូបថ្មី
                     const reader = new FileReader();
                     reader.onload = function(event) {
                         sourceImage.onload = () => {
@@ -177,12 +179,17 @@
         }
 
         // --- ផ្នែករៀបចំ Canvas និង ចំណុចកែង ---
-        function setupCanvasWithImage() {
+        function setupCanvasWithImage(isEditing = false) {
             document.getElementById('placeholder').classList.add('hidden');
             document.getElementById('workspace').classList.remove('hidden');
             document.getElementById('resetCropBtn').classList.add('hidden');
             document.getElementById('doCropBtn').classList.remove('hidden');
-            document.getElementById('instructionText').innerText = "អូសចំណុចក្រហមឲ្យចំកែងឯកសារទាំង៤ រួចចុច 'កាត់រូប'";
+            
+            if(isEditing) {
+                document.getElementById('instructionText').innerText = "ទាញកែងបើចង់កាត់ម្ដងទៀត ឬចុច 'កាត់រូប' ដើម្បីបន្ត";
+            } else {
+                document.getElementById('instructionText').innerText = "អូសចំណុចក្រហមឲ្យចំកែងឯកសារទាំង៤ រួចចុច 'កាត់រូប'";
+            }
             
             isCropped = false;
             currentFilter = "none";
@@ -199,9 +206,9 @@
             canvas.width = originalImgWidth * scaleRatio;
             canvas.height = originalImgHeight * scaleRatio;
 
-            // បង្កើតចំណុចកែងទាំង៤ (កំណត់យក 80% នៃរូបភាពជាជំហានដំបូង)
-            const padX = canvas.width * 0.1;
-            const padY = canvas.height * 0.1;
+            // បង្កើតចំណុចកែងទាំង៤ (បើ Edit យក 100% ពេញ, បើថ្មីយក 80%)
+            const padX = isEditing ? 0 : canvas.width * 0.1;
+            const padY = isEditing ? 0 : canvas.height * 0.1;
             corners = [
                 { x: padX, y: padY }, // លើ-ឆ្វេង (Top-Left)
                 { x: canvas.width - padX, y: padY }, // លើ-ស្តាំ (Top-Right)
@@ -387,7 +394,7 @@
 
         // ត្រឡប់ទៅកាត់ម្ដងទៀត
         document.getElementById('resetCropBtn').addEventListener('click', () => {
-            setupCanvasWithImage(); // ហៅរៀបចំសាថ្មី
+            setupCanvasWithImage(editingIndex !== null); // ហៅរៀបចំសាថ្មី
         });
 
         // --- ផ្នែក Filters និង Save ---
@@ -418,7 +425,17 @@
             // បម្លែងទៅជា JPEG (គុណភាព 95% ដើម្បីរក្សាភាពច្បាស់ High Quality)
             const finalDataUrl = tmpCanvas.toDataURL('image/jpeg', 0.95);
             
-            savedImages.push(finalDataUrl);
+            if (editingIndex !== null) {
+                // Update ឯកសារចាស់
+                savedImages[editingIndex] = finalDataUrl;
+                alert('បានធ្វើបច្ចុប្បន្នភាពទំព័រទី ' + (editingIndex + 1) + ' ដោយជោគជ័យ!');
+                editingIndex = null; // Reset
+            } else {
+                // Save ឯកសារថ្មី
+                savedImages.push(finalDataUrl);
+                alert('បានរក្សាទុកទំព័រទី ' + savedImages.length + ' ចូលក្នុងទូរស័ព្ទ និងបញ្ជីដោយជោគជ័យ!');
+            }
+            
             await localforage.setItem('scannedDocs', savedImages);
             updateSavedList();
             
@@ -449,14 +466,29 @@
             }
             savedImages.forEach((imgSrc, index) => {
                 listDiv.innerHTML += `
-                    <div class="mb-3 p-2 border rounded shadow-sm flex justify-between items-center bg-gray-50">
+                    <div class="mb-3 p-2 border rounded shadow-sm flex justify-between items-center bg-gray-50 cursor-pointer hover:bg-blue-100 transition-colors" onclick="editImage(${index})">
                         <img src="${imgSrc}" class="w-16 h-16 object-cover rounded border">
-                        <span class="text-sm font-bold text-gray-700">ទំព័រ ${index + 1}</span>
-                        <button onclick="deleteImage(${index})" class="text-red-500 p-2"><i class="fa-solid fa-trash"></i></button>
+                        <span class="text-sm font-bold text-gray-700 flex-1 ml-3">ទំព័រ ${index + 1}</span>
+                        <button onclick="event.stopPropagation(); deleteImage(${index})" class="text-red-500 p-2 hover:bg-red-200 rounded transition-colors"><i class="fa-solid fa-trash"></i></button>
                     </div>
                 `;
             });
         }
+
+        // មុខងារបើកមើល និង Edit រូបភាព
+        window.editImage = function(index) {
+            editingIndex = index;
+            
+            // បិទ Sidebar
+            document.getElementById('sidebar').classList.add('sidebar-closed');
+            document.getElementById('sidebar').classList.remove('sidebar-open');
+            
+            // ដាក់រូបចូលទៅក្នុងផ្ទាំង Edit វិញ
+            sourceImage.onload = () => {
+                setupCanvasWithImage(true);
+            };
+            sourceImage.src = savedImages[index];
+        };
 
         // លុបរូបភាព
         window.deleteImage = async function(index) {
