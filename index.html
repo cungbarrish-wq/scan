@@ -93,12 +93,25 @@
                 <canvas id="editorCanvas"></canvas>
                 
                 <!-- កែវពង្រីក (Loupe) សម្រាប់ពេលអូសចំណុចកាត់រូប -->
-                <div id="loupeContainer" class="hidden absolute pointer-events-none z-50 border-4 border-gray-300 rounded-full overflow-hidden shadow-xl bg-black" style="width: 100px; height: 100px;">
-                    <canvas id="loupeCanvas" width="100" height="100"></canvas>
-                    <!-- សញ្ញាបូកចំកណ្តាលកែវពង្រីក -->
-                    <div class="absolute top-1/2 left-1/2 w-4 h-0.5 bg-green-400 -translate-x-1/2 -translate-y-1/2"></div>
-                    <div class="absolute top-1/2 left-1/2 w-0.5 h-4 bg-green-400 -translate-x-1/2 -translate-y-1/2"></div>
-                </div>
+            <div id="loupeContainer" class="hidden absolute pointer-events-none z-50 border-4 border-gray-300 rounded-full overflow-hidden shadow-xl bg-black" style="width: 100px; height: 100px;">
+                <canvas id="loupeCanvas" width="100" height="100"></canvas>
+                <!-- សញ្ញាបូកចំកណ្តាលកែវពង្រីក -->
+                <div class="absolute top-1/2 left-1/2 w-4 h-0.5 bg-green-400 -translate-x-1/2 -translate-y-1/2"></div>
+                <div class="absolute top-1/2 left-1/2 w-0.5 h-4 bg-green-400 -translate-x-1/2 -translate-y-1/2"></div>
+            </div>
+        </div>
+        
+        <!-- Tools Menu -->
+        <div class="mt-6 grid grid-cols-5 gap-1 sm:gap-2 w-full text-center text-[10px] sm:text-xs font-bold">
+            <button id="rotateBtn" class="bg-gray-200 active:bg-gray-300 text-gray-800 p-2 rounded-lg shadow flex flex-col items-center justify-center"><i class="fa-solid fa-rotate-right block text-lg mb-1"></i> បង្វិល</button>
+            <button id="doCropBtn" class="bg-blue-500 active:bg-blue-600 text-white p-2 rounded-lg shadow flex flex-col items-center justify-center"><i class="fa-solid fa-crop-simple block text-lg mb-1"></i> កាត់រូប</button>
+            <button id="filterWhiteboardBtn" class="bg-gray-200 active:bg-gray-300 text-gray-800 p-2 rounded-lg shadow flex flex-col items-center justify-center"><i class="fa-solid fa-chess-board block text-lg mb-1"></i> ស/ខ្មៅ</button>
+            <button id="filterPhotoBtn" class="bg-gray-200 active:bg-gray-300 text-gray-800 p-2 rounded-lg shadow flex flex-col items-center justify-center"><i class="fa-solid fa-image block text-lg mb-1"></i> ពណ៌ដើម</button>
+            <button id="saveBtn" class="bg-green-500 active:bg-green-600 text-white p-2 rounded-lg shadow flex flex-col items-center justify-center"><i class="fa-solid fa-floppy-disk block text-lg mb-1"></i> Save</button>
+        </div>
+        
+        <button id="resetCropBtn" class="mt-4 text-blue-600 underline text-sm hidden font-bold p-2">ត្រឡប់ទៅកាត់ម្ដងទៀត</button>
+    </div>
             </div>
             
             <!-- Tools Menu -->
@@ -526,6 +539,73 @@
         canvas.addEventListener('touchstart', handleStart, {passive: false});
         canvas.addEventListener('touchmove', handleMove, {passive: false});
         window.addEventListener('touchend', handleEnd);
+
+        // --- មុខងារបង្វិលរូបភាព (Rotate) ---
+        document.getElementById('rotateBtn').addEventListener('click', () => {
+            if(!cvReady) return alert("ប្រព័ន្ធកំពុងរៀបចំ...");
+            
+            // ១. បង្វិលរូបភាពដើម (Source Image) ៩០ដឺក្រេ
+            let src = cv.imread(sourceImage);
+            let dst = new cv.Mat();
+            cv.rotate(src, dst, cv.ROTATE_90_CLOCKWISE);
+
+            const tmpCanvas = document.createElement('canvas');
+            cv.imshow(tmpCanvas, dst);
+            src.delete(); dst.delete();
+
+            // ២. គណនាទីតាំងកែងថ្មីដើម្បីកុំឲ្យរត់ខុសកន្លែង
+            let relCorners = [];
+            if (isCropped && savedRelativeCorners && savedRelativeCorners.length === 4) {
+                 relCorners = savedRelativeCorners; // យកកែងដែលបាន Save ពេលកាត់
+            } else {
+                 relCorners = corners.map(c => ({
+                     x: c.x / canvas.width,
+                     y: c.y / canvas.height
+                 }));
+            }
+
+            // រូបមន្តបង្វិលកូអរដោនេកែង ៩០ដឺក្រេ ស្របទ្រនិចនាឡិកា
+            let rotatedCorners = relCorners.map(c => ({
+                x: 1 - c.y,
+                y: c.x
+            }));
+            
+            // រៀបលំដាប់កែងឡើងវិញ (Top-Left មកមុនគេ)
+            relCorners = [
+                rotatedCorners[3],
+                rotatedCorners[0],
+                rotatedCorners[1],
+                rotatedCorners[2]
+            ];
+
+            // ៣. អាប់ដេតរូបភាព និងគូរឡើងវិញ
+            sourceImage.onload = () => {
+                originalImgWidth = sourceImage.width;
+                originalImgHeight = sourceImage.height;
+
+                const maxWidth = window.innerWidth - 32; 
+                const maxHeight = window.innerHeight * 0.55;
+                scaleRatio = Math.min(maxWidth / originalImgWidth, maxHeight / originalImgHeight);
+
+                canvas.width = originalImgWidth * scaleRatio;
+                canvas.height = originalImgHeight * scaleRatio;
+
+                corners = relCorners.map(c => ({
+                    x: c.x * canvas.width,
+                    y: c.y * canvas.height
+                }));
+
+                if (isCropped) {
+                    // ប្រសិនបើកំពុងមើលផ្ទាំងដែលកាត់ហើយ ធ្វើការកាត់សារជាថ្មីដោយស្វ័យប្រវត្តិ
+                    savedRelativeCorners = relCorners;
+                    isCropped = false; 
+                    document.getElementById('doCropBtn').click(); 
+                } else {
+                    drawEditor();
+                }
+            };
+            sourceImage.src = tmpCanvas.toDataURL('image/jpeg', 1.0);
+        });
 
         // --- ផ្នែកអនុវត្ត Perspective Transform (OpenCV) ---
         document.getElementById('doCropBtn').addEventListener('click', () => {
