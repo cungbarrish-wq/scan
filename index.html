@@ -29,6 +29,7 @@
         #editorCanvas { touch-action: none; max-width: 100%; max-height: 60vh; } 
     </style>
 </head>
+    <br>
 <body class="bg-gray-100 flex flex-col overflow-hidden">
 
     <!-- Loading Screen សម្រាប់រង់ចាំ OpenCV ដំណើរការ -->
@@ -124,6 +125,8 @@
         const loupeCanvas = document.getElementById('loupeCanvas');
         const loupeCtx = loupeCanvas.getContext('2d');
         
+        // Data Store 
+        // ឥឡូវរក្សាទុកជា Object: { original: 'base64', cropped: 'base64', corners: [{x,y}...], filter: 'str' }
         let savedImages = [];
         let cvReady = false;
 
@@ -166,7 +169,7 @@
                     const reader = new FileReader();
                     reader.onload = function(event) {
                         sourceImage.onload = () => {
-                            setupCanvasWithImage(false);
+                            setupCanvasWithImage(false); // មិនមែនជាការ Edit ទេ
                         };
                         sourceImage.src = event.target.result;
                     };
@@ -175,6 +178,75 @@
             });
 
             loadSavedData();
+        }
+
+        // --- ស្វែងរកកែងក្រដាសដោយស្វ័យប្រវត្តិ (Auto Edge Detection) ---
+        function autoDetectCorners() {
+            try {
+                let src = cv.imread(sourceImage);
+                let gray = new cv.Mat();
+                cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
+                cv.GaussianBlur(gray, gray, new cv.Size(5, 5), 0, 0, cv.BORDER_DEFAULT);
+                let edged = new cv.Mat();
+                cv.Canny(gray, edged, 75, 200); // រកគែម
+
+                let contours = new cv.MatVector();
+                let hierarchy = new cv.Mat();
+                cv.findContours(edged, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
+
+                let maxArea = 0;
+                let bestApprox = new cv.Mat();
+
+                // រកកែងចតុកោណដែលធំជាងគេ
+                for (let i = 0; i < contours.size(); ++i) {
+                    let cnt = contours.get(i);
+                    let area = cv.contourArea(cnt);
+                    if (area > 1000) {
+                        let peri = cv.arcLength(cnt, true);
+                        let approx = new cv.Mat();
+                        cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
+                        
+                        if (approx.rows === 4 && area > maxArea) {
+                            maxArea = area;
+                            approx.copyTo(bestApprox);
+                        }
+                        approx.delete();
+                    }
+                    cnt.delete();
+                }
+
+                let foundCorners = null;
+                // ប្រសិនបើរាងនោះជាចតុកោណ ហើយធំជាង 10% នៃរូបភាព
+                if (bestApprox.rows === 4 && maxArea > (src.cols * src.rows * 0.1)) {
+                    let pts = [];
+                    for (let i = 0; i < 4; i++) {
+                        pts.push({
+                            x: bestApprox.data32S[i * 2] * scaleRatio,
+                            y: bestApprox.data32S[i * 2 + 1] * scaleRatio
+                        });
+                    }
+                    
+                    // តម្រៀបកែង: លើ-ឆ្វេង, លើ-ស្តាំ, ក្រោម-ស្តាំ, ក្រោម-ឆ្វេង
+                    pts.sort((a, b) => (a.x + a.y) - (b.x + b.y)); // តូចជាងគេ = TL, ធំជាងគេ = BR
+                    let tl = pts[0];
+                    let br = pts[3];
+                    let rem = [pts[1], pts[2]];
+                    rem.sort((a, b) => (a.x - a.y) - (b.x - b.y)); // x-y តូច = BL, ធំ = TR
+                    let bl = rem[0];
+                    let tr = rem[1];
+                    
+                    foundCorners = [tl, tr, br, bl];
+                }
+
+                // សម្អាត Memory OpenCV
+                bestApprox.delete();
+                src.delete(); gray.delete(); edged.delete(); contours.delete(); hierarchy.delete();
+
+                return foundCorners;
+            } catch (err) {
+                console.error("បញ្ហាក្នុងការ Auto-crop:", err);
+                return null;
+            }
         }
 
         // --- ផ្នែករៀបចំ Canvas និង ចំណុចកែង ---
@@ -205,15 +277,32 @@
             canvas.width = originalImgWidth * scaleRatio;
             canvas.height = originalImgHeight * scaleRatio;
 
-            // បង្កើតចំណុចកែងទាំង៤ (បើ Edit យក 100% ពេញ, បើថ្មីយក 80%)
-            const padX = isEditing ? 0 : canvas.width * 0.1;
-            const padY = isEditing ? 0 : canvas.height * 0.1;
-            corners = [
-                { x: padX, y: padY }, 
-                { x: canvas.width - padX, y: padY }, 
-                { x: canvas.width - padX, y: canvas.height - padY }, 
-                { x: padX, y: canvas.height - padY } 
-            ];
+            // រៀបចំចំណុចកែង
+            if (isEditing && editingIndex !== null && savedImages[editingIndex] && savedImages[editingIndex].corners) {
+                // ១. ប្រសិនបើ Edit គឺទាញយកកែងចាស់ដែលយើងធ្លាប់បាន Save មកវិញ
+                let savedCorners = savedImages[editingIndex].corners;
+                corners = savedCorners.map(c => ({
+                    x: c.x * canvas.width,
+                    y: c.y * canvas.height
+                }));
+                currentFilter = savedImages[editingIndex].filter || "none";
+            } else {
+                // ២. ប្រសិនបើរូបថ្មី សាកល្បង Auto Detect សិន
+                let detectedCorners = autoDetectCorners();
+                if (detectedCorners) {
+                    corners = detectedCorners;
+                } else {
+                    // ៣. បើរកគែមអត់ឃើញ យកលំនាំដើម (80% នៃរូបភាព)
+                    const padX = canvas.width * 0.1;
+                    const padY = canvas.height * 0.1;
+                    corners = [
+                        { x: padX, y: padY }, 
+                        { x: canvas.width - padX, y: padY }, 
+                        { x: canvas.width - padX, y: canvas.height - padY }, 
+                        { x: padX, y: canvas.height - padY } 
+                    ];
+                }
+            }
 
             drawEditor();
         }
@@ -416,14 +505,27 @@
             // បម្លែងទៅជា JPEG (គុណភាព 95%)
             const finalDataUrl = tmpCanvas.toDataURL('image/jpeg', 0.95);
             
+            // រក្សាទីតាំងកែងទុក ដើម្បីពេល Edit អាចទាញកែងបានទៀត (ទាញចេញ/ចូល)
+            const relativeCorners = corners.map(c => ({
+                x: c.x / canvas.width,
+                y: c.y / canvas.height
+            }));
+
+            const documentObject = {
+                original: sourceImage.src,   // រក្សារូបដើមទាំងស្រុង
+                cropped: finalDataUrl,       // រូបដែលកាត់ហើយ
+                filter: currentFilter,
+                corners: relativeCorners     // ទីតាំងកែងទាំង៤
+            };
+            
             if (editingIndex !== null) {
                 // Update ឯកសារចាស់
-                savedImages[editingIndex] = finalDataUrl;
+                savedImages[editingIndex] = documentObject;
                 alert('បានធ្វើបច្ចុប្បន្នភាពទំព័រទី ' + (editingIndex + 1) + ' ដោយជោគជ័យ!');
                 editingIndex = null; // Reset
             } else {
                 // Save ឯកសារថ្មី
-                savedImages.push(finalDataUrl);
+                savedImages.push(documentObject);
                 alert('បានរក្សាទុកទំព័រទី ' + savedImages.length + ' ចូលក្នុងទូរស័ព្ទ និងបញ្ជីដោយជោគជ័យ!');
             }
             
@@ -452,7 +554,10 @@
                 listDiv.innerHTML = '<p class="text-gray-500 text-center mt-10">មិនទាន់មានឯកសារទេ</p>';
                 return;
             }
-            savedImages.forEach((imgSrc, index) => {
+            savedImages.forEach((item, index) => {
+                // ការពារទិន្នន័យចាស់ (ជំនាន់មុន) ដែលគ្មាន Object
+                let imgSrc = typeof item === 'string' ? item : item.cropped;
+                
                 listDiv.innerHTML += `
                     <div class="mb-3 p-2 border rounded shadow-sm flex justify-between items-center bg-gray-50 cursor-pointer hover:bg-blue-100 transition-colors" onclick="editImage(${index})">
                         <img src="${imgSrc}" class="w-16 h-16 object-cover rounded border">
@@ -465,17 +570,23 @@
 
         // មុខងារបើកមើល និង Edit រូបភាព
         window.editImage = function(index) {
+            let item = savedImages[index];
+            if (typeof item === 'string') {
+                alert("ទម្រង់ឯកសារជំនាន់ចាស់ មិនអាច Edit បានទេ សូមកាត់ថ្មី។");
+                return;
+            }
+
             editingIndex = index;
             
             // បិទ Sidebar
             document.getElementById('sidebar').classList.add('sidebar-closed');
             document.getElementById('sidebar').classList.remove('sidebar-open');
             
-            // ដាក់រូបចូលទៅក្នុងផ្ទាំង Edit វិញ
+            // ដាក់រូបដើម (Original) ចូលទៅក្នុងផ្ទាំង Edit វិញ
             sourceImage.onload = () => {
                 setupCanvasWithImage(true);
             };
-            sourceImage.src = savedImages[index];
+            sourceImage.src = item.original;
         };
 
         // លុបរូបភាព
@@ -505,8 +616,10 @@
             const { jsPDF } = window.jspdf;
             const pdf = new jsPDF('p', 'mm', 'a4');
 
-            savedImages.forEach((imgData, index) => {
+            savedImages.forEach((item, index) => {
                 if (index > 0) pdf.addPage();
+                
+                let imgData = typeof item === 'string' ? item : item.cropped;
                 
                 const imgProps = pdf.getImageProperties(imgData);
                 const pdfWidth = pdf.internal.pageSize.getWidth();
