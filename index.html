@@ -70,9 +70,18 @@
     <!-- Main Workspace -->
     <div class="flex-1 p-4 flex flex-col items-center justify-start overflow-y-auto relative w-full">
         
-        <div id="placeholder" class="text-gray-400 flex flex-col items-center justify-center h-full w-full">
-            <i class="fa-solid fa-file-signature text-6xl mb-4"></i>
-            <p class="text-center">សូមថតរូប<br>ឬជ្រើសរើសរូបភាពពី Gallery</p>
+        <!-- Home View (បង្ហាញ Album ឯកសារ ឬ ផ្ទាំងទទេ) -->
+        <div id="homeView" class="flex flex-col items-center w-full h-full">
+            <!-- ផ្ទាំងទទេ (ពេលមិនទាន់មានឯកសារ) -->
+            <div id="emptyState" class="text-gray-400 flex flex-col items-center justify-center h-full w-full mt-10">
+                <i class="fa-solid fa-file-signature text-6xl mb-4"></i>
+                <p class="text-center">សូមថតរូប<br>ឬជ្រើសរើសរូបភាពពី Gallery</p>
+            </div>
+            
+            <!-- ផ្ទាំង Album (បង្ហាញឯកសារដែលបានកាត់រួច) -->
+            <div id="albumGrid" class="hidden w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 pb-10 mt-2">
+                <!-- រូបភាពនឹងលោតចូលទីនេះ -->
+            </div>
         </div>
 
         <div id="workspace" class="hidden w-full max-w-md flex flex-col items-center">
@@ -296,7 +305,7 @@
 
         // --- ផ្នែករៀបចំ Canvas និង ចំណុចកែង ---
         function setupCanvasWithImage(isEditing = false) {
-            document.getElementById('placeholder').classList.add('hidden');
+            document.getElementById('homeView').classList.add('hidden');
             document.getElementById('workspace').classList.remove('hidden');
             document.getElementById('resetCropBtn').classList.add('hidden');
             document.getElementById('doCropBtn').classList.remove('hidden');
@@ -636,27 +645,55 @@
             
             // លាក់ Workspace
             document.getElementById('workspace').classList.add('hidden');
-            document.getElementById('placeholder').classList.remove('hidden');
+            document.getElementById('homeView').classList.remove('hidden');
             document.getElementById('fileInput').value = ""; // Reset Input
         });
 
-        // បង្ហាញបញ្ជីរូបភាពក្នុង Sidebar
+        // បង្ហាញបញ្ជីរូបភាពក្នុង Sidebar និង Album កណ្តាល
         function updateSavedList() {
             const listDiv = document.getElementById('savedList');
+            const albumGrid = document.getElementById('albumGrid');
+            const emptyState = document.getElementById('emptyState');
+            
             listDiv.innerHTML = '';
+            albumGrid.innerHTML = '';
+            
             if(savedImages.length === 0) {
                 listDiv.innerHTML = '<p class="text-gray-500 text-center mt-10">មិនទាន់មានឯកសារទេ</p>';
+                emptyState.classList.remove('hidden');
+                albumGrid.classList.add('hidden');
                 return;
             }
+            
+            emptyState.classList.add('hidden');
+            albumGrid.classList.remove('hidden');
+            
             savedImages.forEach((item, index) => {
                 // ការពារទិន្នន័យចាស់ (ជំនាន់មុន) ដែលគ្មាន Object
                 let imgSrc = typeof item === 'string' ? item : item.cropped;
                 
+                // ១. បញ្ចូលក្នុង Sidebar
                 listDiv.innerHTML += `
                     <div class="mb-3 p-2 border rounded shadow-sm flex justify-between items-center bg-gray-50 cursor-pointer hover:bg-blue-100 transition-colors" onclick="editImage(${index})">
                         <img src="${imgSrc}" class="w-16 h-16 object-cover rounded border">
                         <span class="text-sm font-bold text-gray-700 flex-1 ml-3">ទំព័រ ${index + 1}</span>
                         <button onclick="event.stopPropagation(); deleteImage(${index})" class="text-red-500 p-2 hover:bg-red-200 rounded transition-colors"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                `;
+                
+                // ២. បញ្ចូលក្នុងផ្ទាំង Album កណ្តាល (Grid View)
+                albumGrid.innerHTML += `
+                    <div class="bg-white rounded-lg shadow-md overflow-hidden flex flex-col relative group cursor-pointer border hover:border-blue-500 transition-all" onclick="editImage(${index})">
+                        <div class="h-40 w-full bg-gray-200 relative">
+                            <img src="${imgSrc}" class="w-full h-full object-cover">
+                            <div class="absolute top-2 left-2 bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded shadow">
+                                #${index + 1}
+                            </div>
+                        </div>
+                        <div class="p-2 flex justify-between items-center bg-white">
+                            <span class="text-sm font-bold text-gray-700 truncate">ឯកសារទី ${index + 1}</span>
+                            <button onclick="event.stopPropagation(); deleteImage(${index})" class="text-red-500 p-1.5 hover:bg-red-100 rounded transition-colors"><i class="fa-solid fa-trash"></i></button>
+                        </div>
                     </div>
                 `;
             });
