@@ -85,7 +85,7 @@
                 <canvas id="editorCanvas"></canvas>
                 
                 <!-- កែវពង្រីក (Loupe) សម្រាប់ពេលអូសចំណុចកាត់រូប -->
-                <div id="loupeContainer" class="hidden absolute pointer-events-none z-50 border-4 border-gray-300 rounded-full overflow-hidden shadow-xl bg-black" style="width: 100px; height: 100px; transform: translate(-50%, -130%);">
+                <div id="loupeContainer" class="hidden absolute pointer-events-none z-50 border-4 border-gray-300 rounded-full overflow-hidden shadow-xl bg-black" style="width: 100px; height: 100px;">
                     <canvas id="loupeCanvas" width="100" height="100"></canvas>
                     <!-- សញ្ញាបូកចំកណ្តាលកែវពង្រីក -->
                     <div class="absolute top-1/2 left-1/2 w-4 h-0.5 bg-green-400 -translate-x-1/2 -translate-y-1/2"></div>
@@ -260,8 +260,21 @@
         // មុខងារបង្ហាញកែវពង្រីក
         function updateLoupe(pos) {
             loupeContainer.classList.remove('hidden');
-            loupeContainer.style.left = pos.x + 'px';
-            loupeContainer.style.top = pos.y + 'px';
+            
+            // កំណត់ទីតាំងកែវពង្រីក ឲ្យងាកចូលក្នុង (មិនបាំងដៃ និងមិនចេញក្រៅអេក្រង់)
+            let lX = pos.x;
+            let lY = pos.y - 80; // លំនាំដើមគឺនៅខាងលើដៃ 80px
+            
+            // បើជិតគែមលើពេក ប្តូរមកខាងក្រោមដៃវិញ
+            if (lY < 60) lY = pos.y + 80;
+            
+            // ការពារកុំឲ្យចេញក្រៅគែមឆ្វេង-ស្តាំ
+            if (lX < 60) lX = 60;
+            if (lX > canvas.width - 60) lX = canvas.width - 60;
+            
+            loupeContainer.style.left = lX + 'px';
+            loupeContainer.style.top = lY + 'px';
+            loupeContainer.style.transform = 'translate(-50%, -50%)';
             
             loupeCtx.clearRect(0, 0, 100, 100);
             // ចម្លងរូបពី Canvas ចំណុចកណ្តាលដៃ ទំហំ 50x50 មកដាក់លើកែវពង្រីក 100x100 (Zoom 2x)
@@ -409,7 +422,16 @@
             await localforage.setItem('scannedDocs', savedImages);
             updateSavedList();
             
-            alert('បានរក្សាទុកទំព័រទី ' + savedImages.length + ' ដោយជោគជ័យ!');
+            // --- ចាប់ផ្តើមមុខងារ Save ចូល Device (Gallery/Photos) ---
+            const link = document.createElement('a');
+            link.href = finalDataUrl;
+            link.download = `DocScanner_Page_${savedImages.length}.jpg`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            // --- បញ្ចប់មុខងារ Save ចូល Device ---
+            
+            alert('បានរក្សាទុកទំព័រទី ' + savedImages.length + ' ចូលក្នុងទូរស័ព្ទ និងបញ្ជីដោយជោគជ័យ!');
             
             // លាក់ Workspace
             document.getElementById('workspace').classList.add('hidden');
