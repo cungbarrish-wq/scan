@@ -2,45 +2,45 @@
 <html lang="km">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="icon" type="image/jpeg" href="https://img.freepik.com/premium-vector/scan-documents-icon_268104-3391.jpg?w=360">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>DocScanner App</title>
+    
+    <!-- PWA & SEO Meta Tags -->
+    <link rel="icon" type="image/jpeg" href="https://img.freepik.com/premium-vector/scan-documents-icon_268104-3391.jpg?w=360">
+    <link rel="apple-touch-icon" href="https://img.freepik.com/premium-vector/scan-documents-icon_268104-3391.jpg?w=360">
+    <link rel="manifest" href="manifest.json">
+    <meta property="og:title" content="Document Scanner App">
+    <meta property="og:description" content="កម្មវិធី Scan ឯកសារ ទាញកែង និងបំប្លែងទៅជា PDF ដោយងាយស្រួល។">
+    <meta property="og:image" content="https://img.freepik.com/premium-vector/scan-documents-icon_268104-3391.jpg?w=360">
 
-<link rel="apple-touch-icon" href="https://img.freepik.com/premium-vector/scan-documents-icon_268104-3391.jpg?w=360">
-
-<link rel="manifest" href="manifest.json">
-
-<meta property="og:title" content="Document Scanner App">
-<meta property="og:description" content="កម្មវិធី Scan ឯកសារ កាត់ត និងបំប្លែងទៅជា PDF ដោយងាយស្រួល។">
-<meta property="og:image" content="https://img.freepik.com/premium-vector/scan-documents-icon_268104-3391.jpg?w=360">
-<meta property="og:url" content="https://your-website-url.com"> <meta property="og:type" content="website">
-
-<meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Document Scanner App">
-<meta name="twitter:description" content="កម្មវិធី Scan ឯកសារ កាត់ត និងបំប្លែងទៅជា PDF ដោយងាយស្រួល។">
-<meta name="twitter:image" content="https://img.freepik.com/premium-vector/scan-documents-icon_268104-3391.jpg?w=360">
-  
-    <title>Document Scanner App</title>
+    <!-- Tailwind CSS សម្រាប់រៀបចំ UI -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+    <!-- jsPDF សម្រាប់បង្កើត PDF -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- LocalForage សម្រាប់ផ្ទុករូបភាព -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
+    <!-- FontAwesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
-  
     
     <style>
-        /* CSS សម្រាប់ Sidebar Menu */
         #sidebar { transition: transform 0.3s ease-in-out; }
         .sidebar-open { transform: translateX(0); }
         .sidebar-closed { transform: translateX(-100%); }
-        .image-container { max-height: 60vh; overflow: hidden; }
-        img { display: block; max-width: 100%; }
+        /* ការពារកុំឲ្យរមិលអេក្រង់ពេលកំពុងអូសកែងនៅលើទូរស័ព្ទ */
+        #editorCanvas { touch-action: none; max-width: 100%; max-height: 60vh; } 
     </style>
 </head>
-<body class="bg-gray-100 h-screen flex flex-col">
+<body class="bg-gray-100 h-screen flex flex-col overflow-hidden">
 
-    <div class="bg-blue-600 text-white p-4 flex justify-between items-center shadow-md">
+    <!-- Loading Screen សម្រាប់រង់ចាំ OpenCV ដំណើរការ -->
+    <div id="loadingScreen" class="fixed inset-0 bg-white z-[100] flex flex-col items-center justify-center">
+        <i class="fa-solid fa-spinner fa-spin text-4xl text-blue-600 mb-4"></i>
+        <p class="text-gray-700 font-bold">កំពុងរៀបចំប្រព័ន្ធកាត់រូប...</p>
+        <p class="text-sm text-gray-500">(សូមរង់ចាំបន្តិច)</p>
+    </div>
+
+    <!-- Navbar -->
+    <div class="bg-blue-600 text-white p-4 flex justify-between items-center shadow-md z-40 relative">
         <button id="menuBtn" class="text-2xl focus:outline-none">
             <i class="fa-solid fa-bars"></i>
         </button>
@@ -51,160 +51,376 @@
         </label>
     </div>
 
+    <!-- Sidebar (Hide Menu) -->
     <div id="sidebar" class="sidebar-closed fixed top-0 left-0 h-full w-64 bg-white shadow-xl z-50 flex flex-col">
-        <div class="bg-blue-600 text-white p-4 text-lg font-bold flex justify-between items-center">
+        <div class="bg-blue-600 text-white p-4 text-lg font-bold flex justify-between items-center mt-14">
             <span>ឯកសារដែលបាន Save</span>
-            <button id="closeMenuBtn"><i class="fa-solid fa-times"></i></button>
+            <button id="closeMenuBtn"><i class="fa-solid fa-times text-2xl"></i></button>
         </div>
         <div class="p-4 flex-1 overflow-y-auto" id="savedList">
-            </div>
+            <!-- បញ្ជីរូបភាពដែលបាន Save -->
+        </div>
         <div class="p-4 border-t">
-            <button id="exportPdfBtn" class="w-full bg-red-500 text-white py-2 rounded shadow flex justify-center items-center gap-2">
-                <i class="fa-solid fa-file-pdf"></i> Export ជា PDF
+            <button id="exportPdfBtn" class="w-full bg-red-500 text-white py-3 rounded-lg shadow flex justify-center items-center gap-2 font-bold">
+                <i class="fa-solid fa-file-pdf"></i> បង្កើតជា PDF
             </button>
         </div>
     </div>
 
-    <div class="flex-1 p-4 flex flex-col items-center justify-center">
-        <div id="workspace" class="hidden w-full max-w-md bg-white p-2 shadow-lg rounded">
-            <div class="image-container">
-                <img id="imagePreview" src="" alt="Preview">
-            </div>
-            
-            <div class="mt-4 grid grid-cols-4 gap-2 text-center text-sm">
-                <button id="cropBtn" class="bg-gray-200 p-2 rounded"><i class="fa-solid fa-crop-simple block text-lg"></i> Crop</button>
-                <button id="filterWhiteboardBtn" class="bg-gray-200 p-2 rounded"><i class="fa-solid fa-chess-board block text-lg"></i> Whiteboard</button>
-                <button id="filterPhotoBtn" class="bg-gray-200 p-2 rounded"><i class="fa-solid fa-image block text-lg"></i> Photo</button>
-                <button id="saveBtn" class="bg-green-500 text-white p-2 rounded"><i class="fa-solid fa-floppy-disk block text-lg"></i> Save</button>
-            </div>
-            
-            <div class="mt-4">
-                <label class="block text-xs text-gray-500">Brightness</label>
-                <input type="range" id="brightness" min="50" max="150" value="100" class="w-full">
-            </div>
-        </div>
-        <div id="placeholder" class="text-gray-400 flex flex-col items-center">
+    <!-- Main Workspace -->
+    <div class="flex-1 p-4 flex flex-col items-center justify-start overflow-y-auto relative">
+        
+        <div id="placeholder" class="text-gray-400 flex flex-col items-center justify-center h-full">
             <i class="fa-solid fa-file-signature text-6xl mb-2"></i>
             <p>សូមថត ឬជ្រើសរើសរូបភាពដើម្បីចាប់ផ្ដើម</p>
         </div>
+
+        <div id="workspace" class="hidden w-full max-w-md flex flex-col items-center">
+            
+            <p id="instructionText" class="text-sm text-gray-600 mb-2 font-bold">អូសចំណុចក្រហមឲ្យចំកែងឯកសារទាំង៤</p>
+            
+            <!-- Canvas សម្រាប់បង្ហាញរូប និងអូសកែង -->
+            <div class="relative bg-black rounded shadow-lg flex justify-center items-center">
+                <canvas id="editorCanvas"></canvas>
+            </div>
+            
+            <!-- Tools Menu -->
+            <div class="mt-4 grid grid-cols-4 gap-2 w-full text-center text-sm">
+                <button id="doCropBtn" class="bg-blue-500 text-white p-2 rounded shadow"><i class="fa-solid fa-crop-simple block text-lg"></i> កាត់រូប</button>
+                <button id="filterWhiteboardBtn" class="bg-gray-200 text-gray-800 p-2 rounded shadow"><i class="fa-solid fa-chess-board block text-lg"></i> ស/ខ្មៅ</button>
+                <button id="filterPhotoBtn" class="bg-gray-200 text-gray-800 p-2 rounded shadow"><i class="fa-solid fa-image block text-lg"></i> ពណ៌ដើម</button>
+                <button id="saveBtn" class="bg-green-500 text-white p-2 rounded shadow"><i class="fa-solid fa-floppy-disk block text-lg"></i> Save</button>
+            </div>
+            
+            <button id="resetCropBtn" class="mt-2 text-blue-600 underline text-sm hidden">ត្រឡប់ទៅកាត់ម្ដងទៀត</button>
+        </div>
     </div>
 
-    <canvas id="filterCanvas" class="hidden"></canvas>
+    <!-- រូបភាពដើមលាក់ទុក (High Res) -->
+    <img id="sourceImage" class="hidden" alt="Source">
+    <!-- Canvas លាក់ទុកសម្រាប់ Save ជាកម្រិតច្បាស់ -->
+    <canvas id="outputCanvas" class="hidden"></canvas>
+
+    <!-- Load OpenCV.js -->
+    <script async src="https://docs.opencv.org/4.8.0/opencv.js" onload="onOpenCvReady()" type="text/javascript"></script>
 
     <script>
-        const menuBtn = document.getElementById('menuBtn');
-        const closeMenuBtn = document.getElementById('closeMenuBtn');
-        const sidebar = document.getElementById('sidebar');
-        const fileInput = document.getElementById('fileInput');
-        const imagePreview = document.getElementById('imagePreview');
-        const workspace = document.getElementById('workspace');
-        const placeholder = document.getElementById('placeholder');
-        const brightnessInput = document.getElementById('brightness');
-        
-        let cropper;
-        let savedImages = []; // ផ្ទុកទិន្នន័យ Base64
+        // អថេរសម្រាប់គ្រប់គ្រង UI និង Canvas
+        const canvas = document.getElementById('editorCanvas');
+        const ctx = canvas.getContext('2d');
+        const sourceImage = document.getElementById('sourceImage');
+        const outputCanvas = document.getElementById('outputCanvas');
+        let savedImages = [];
+        let cvReady = false;
 
-        // មុខងារបើក/បិទ Sidebar
-        menuBtn.addEventListener('click', () => {
-            sidebar.classList.remove('sidebar-closed');
-            sidebar.classList.add('sidebar-open');
-        });
-        closeMenuBtn.addEventListener('click', () => {
-            sidebar.classList.remove('sidebar-open');
-            sidebar.classList.add('sidebar-closed');
-        });
+        // អថេរសម្រាប់គ្រប់គ្រងការអូសកែង (Drag)
+        let originalImgWidth = 0;
+        let originalImgHeight = 0;
+        let scaleRatio = 1; // សមាមាត្ររវាង Canvas និង រូបភាពដើម
+        let corners = []; // ផ្ទុកចំណុចកែងទាំង៤
+        let draggingPoint = null; // ចំណុចដែលកំពុងត្រូវបានអូស
+        let isCropped = false;
+        let currentFilter = "none";
 
-        // ពេលបញ្ចូលរូបភាព
-        fileInput.addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = function(event) {
-                    imagePreview.src = event.target.result;
-                    workspace.classList.remove('hidden');
-                    placeholder.classList.add('hidden');
-                    
-                    // Reset Cropper បើមាន
-                    if(cropper) cropper.destroy();
-                    imagePreview.style.filter = "brightness(100%) contrast(100%) grayscale(0%)";
-                    brightnessInput.value = 100;
-                };
-                reader.readAsDataURL(file);
-            }
-        });
-
-        // មុខងារ Crop (Manual Crop / Auto-ratio)
-        document.getElementById('cropBtn').addEventListener('click', () => {
-            if (cropper) {
-                // ទទួលបានរូបដែល Crop រួច
-                const croppedCanvas = cropper.getCroppedCanvas();
-                imagePreview.src = croppedCanvas.toDataURL();
-                cropper.destroy();
-                cropper = null;
-            } else {
-                // បើកមុខងារ Crop
-                cropper = new Cropper(imagePreview, {
-                    viewMode: 1,
-                    autoCropArea: 0.8,
-                });
-            }
-        });
-
-        // មុខងារ Filter (Whiteboard / Document)
-        document.getElementById('filterWhiteboardBtn').addEventListener('click', () => {
-            // បង្កើនពន្លឺ និង Contrast កាត់បន្ថយពណ៌
-            imagePreview.style.filter = "brightness(110%) contrast(150%) grayscale(100%)";
-        });
-
-        // មុខងារ Filter (Photo)
-        document.getElementById('filterPhotoBtn').addEventListener('click', () => {
-            imagePreview.style.filter = "brightness(100%) contrast(110%) saturate(120%)";
-        });
-
-        // មុខងារកែពន្លឺ Manual
-        brightnessInput.addEventListener('input', (e) => {
-            imagePreview.style.filter = `brightness(${e.target.value}%)`;
-        });
-
-        // មុខងារ Save រូបភាពទុកក្នុង Frontend List (IndexedDB)
-        document.getElementById('saveBtn').addEventListener('click', async () => {
-            // Apply filter ចូលក្នុង Canvas ដើម្បីទាញយករូបពិត
-            const canvas = document.getElementById('filterCanvas');
-            const ctx = canvas.getContext('2d');
-            const img = new Image();
-            img.src = imagePreview.src;
-            
-            img.onload = async () => {
-                canvas.width = img.width;
-                canvas.height = img.height;
-                ctx.filter = imagePreview.style.filter !== "" ? imagePreview.style.filter : "none";
-                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                
-                const finalDataUrl = canvas.toDataURL('image/jpeg', 0.8); // Save ជា JPEG ដើម្បីបន្ថយទំហំ
-                
-                savedImages.push(finalDataUrl);
-                // Save ចូល LocalForage ដើម្បីកុំឲ្យពេញ Storage ពេលមាន ១០០សន្លឹក
-                await localforage.setItem('scannedDocs', savedImages);
-                updateSavedList();
-                alert('បានរក្សាទុកដោយជោគជ័យ!');
+        // --- ផ្នែករៀបចំ OpenCV ---
+        function onOpenCvReady() {
+            cv['onRuntimeInitialized'] = () => {
+                cvReady = true;
+                document.getElementById('loadingScreen').classList.add('hidden');
+                initApp();
             };
+        }
+
+        function initApp() {
+            // UI Event Listeners
+            document.getElementById('menuBtn').addEventListener('click', () => {
+                document.getElementById('sidebar').classList.remove('sidebar-closed');
+                document.getElementById('sidebar').classList.add('sidebar-open');
+                updateSavedList();
+            });
+            document.getElementById('closeMenuBtn').addEventListener('click', () => {
+                document.getElementById('sidebar').classList.add('sidebar-closed');
+                document.getElementById('sidebar').classList.remove('sidebar-open');
+            });
+
+            // ផ្ទុករូបភាពពីកាមេរ៉ា ឬ File
+            document.getElementById('fileInput').addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = function(event) {
+                        sourceImage.onload = () => {
+                            setupCanvasWithImage();
+                        };
+                        sourceImage.src = event.target.result;
+                    };
+                    reader.readAsDataURL(file);
+                }
+            });
+
+            loadSavedData();
+        }
+
+        // --- ផ្នែករៀបចំ Canvas និង ចំណុចកែង ---
+        function setupCanvasWithImage() {
+            document.getElementById('placeholder').classList.add('hidden');
+            document.getElementById('workspace').classList.remove('hidden');
+            document.getElementById('resetCropBtn').classList.add('hidden');
+            document.getElementById('doCropBtn').classList.remove('hidden');
+            document.getElementById('instructionText').innerText = "អូសចំណុចក្រហមឲ្យចំកែងឯកសារទាំង៤ រួចចុច 'កាត់រូប'";
+            
+            isCropped = false;
+            currentFilter = "none";
+            
+            originalImgWidth = sourceImage.width;
+            originalImgHeight = sourceImage.height;
+
+            // កំណត់ទំហំ Canvas ឲ្យល្មមនឹងអេក្រង់ទូរស័ព្ទ
+            const maxWidth = window.innerWidth - 32; 
+            const maxHeight = window.innerHeight * 0.55;
+            
+            scaleRatio = Math.min(maxWidth / originalImgWidth, maxHeight / originalImgHeight);
+            
+            canvas.width = originalImgWidth * scaleRatio;
+            canvas.height = originalImgHeight * scaleRatio;
+
+            // បង្កើតចំណុចកែងទាំង៤ (កំណត់យក 80% នៃរូបភាពជាជំហានដំបូង)
+            const padX = canvas.width * 0.1;
+            const padY = canvas.height * 0.1;
+            corners = [
+                { x: padX, y: padY }, // លើ-ឆ្វេង (Top-Left)
+                { x: canvas.width - padX, y: padY }, // លើ-ស្តាំ (Top-Right)
+                { x: canvas.width - padX, y: canvas.height - padY }, // ក្រោម-ស្តាំ (Bottom-Right)
+                { x: padX, y: canvas.height - padY } // ក្រោម-ឆ្វេង (Bottom-Left)
+            ];
+
+            drawEditor();
+        }
+
+        // គូររូបភាព និងបន្ទាត់កែង
+        function drawEditor() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // ប្រសិនបើកាត់រួច បង្ហាញរូបដែលកាត់ແລ້វ
+            if (isCropped) {
+                ctx.filter = currentFilter;
+                ctx.drawImage(outputCanvas, 0, 0, canvas.width, canvas.height);
+                ctx.filter = "none";
+                return;
+            }
+
+            // គូររូបភាពដើម
+            ctx.drawImage(sourceImage, 0, 0, canvas.width, canvas.height);
+
+            // គូរផ្ទៃស្រមោលក្រៅតំបន់កាត់ (Overlay)
+            ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+            ctx.beginPath();
+            ctx.moveTo(0, 0); ctx.lineTo(canvas.width, 0); ctx.lineTo(canvas.width, canvas.height); ctx.lineTo(0, canvas.height); ctx.closePath();
+            ctx.moveTo(corners[0].x, corners[0].y);
+            ctx.lineTo(corners[3].x, corners[3].y);
+            ctx.lineTo(corners[2].x, corners[2].y);
+            ctx.lineTo(corners[1].x, corners[1].y);
+            ctx.closePath();
+            ctx.fill("evenodd");
+
+            // គូរបន្ទាត់តភ្ជាប់កែង
+            ctx.strokeStyle = "#3b82f6"; // ពណ៌ខៀវ
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(corners[0].x, corners[0].y);
+            for(let i=1; i<4; i++) ctx.lineTo(corners[i].x, corners[i].y);
+            ctx.closePath();
+            ctx.stroke();
+
+            // គូរចំណុចទាំង៤
+            ctx.fillStyle = "#ef4444"; // ពណ៌ក្រហម
+            corners.forEach(p => {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 10, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+            });
+        }
+
+        // --- ផ្នែកបញ្ជាការអូស (Mouse & Touch Events) ---
+        function getPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return {
+                x: clientX - rect.left,
+                y: clientY - rect.top
+            };
+        }
+
+        function handleStart(e) {
+            if(isCropped) return;
+            e.preventDefault();
+            const pos = getPos(e);
+            // ស្វែងរកចំណុចដែលត្រូវនឹងកន្លែងចុច (រង្វង់ធំជាងបន្តិចងាយស្រួលចុចលើទូរស័ព្ទ)
+            draggingPoint = corners.find(p => Math.hypot(p.x - pos.x, p.y - pos.y) < 30);
+        }
+
+        function handleMove(e) {
+            if (!draggingPoint || isCropped) return;
+            e.preventDefault();
+            const pos = getPos(e);
+            // ការពារកុំឲ្យអូសចេញក្រៅ Canvas
+            draggingPoint.x = Math.max(0, Math.min(canvas.width, pos.x));
+            draggingPoint.y = Math.max(0, Math.min(canvas.height, pos.y));
+            drawEditor();
+        }
+
+        function handleEnd(e) {
+            draggingPoint = null;
+        }
+
+        canvas.addEventListener('mousedown', handleStart);
+        canvas.addEventListener('mousemove', handleMove);
+        window.addEventListener('mouseup', handleEnd);
+        
+        canvas.addEventListener('touchstart', handleStart, {passive: false});
+        canvas.addEventListener('touchmove', handleMove, {passive: false});
+        window.addEventListener('touchend', handleEnd);
+
+        // --- ផ្នែកអនុវត្ត Perspective Transform (OpenCV) ---
+        document.getElementById('doCropBtn').addEventListener('click', () => {
+            if(!cvReady) return alert("ប្រព័ន្ធកំពុងរៀបចំ...");
+            
+            // ១. ទាញយករូបដើម (High Res) ចូលក្នុង OpenCV
+            let src = cv.imread(sourceImage);
+            
+            // ២. បំប្លែងកូអរដោនេពី Canvas តូច ទៅជារូបដើមធំ
+            let c = corners.map(p => ({ x: p.x / scaleRatio, y: p.y / scaleRatio }));
+            
+            // ៣. គណនាប្រវែងនិងទទឹងរបស់ឯកសារថ្មី (ចម្ងាយរវាងចំណុច)
+            let widthA = Math.hypot(c[1].x - c[0].x, c[1].y - c[0].y);
+            let widthB = Math.hypot(c[2].x - c[3].x, c[2].y - c[3].y);
+            let maxWidth = Math.max(widthA, widthB);
+
+            let heightA = Math.hypot(c[3].x - c[0].x, c[3].y - c[0].y);
+            let heightB = Math.hypot(c[2].x - c[1].x, c[2].y - c[1].y);
+            let maxHeight = Math.max(heightA, heightB);
+
+            // ៤. បង្កើត Matrix សម្រាប់បំប្លែង
+            let srcCoords = [c[0].x, c[0].y, c[1].x, c[1].y, c[2].x, c[2].y, c[3].x, c[3].y];
+            let dstCoords = [0, 0, maxWidth, 0, maxWidth, maxHeight, 0, maxHeight];
+
+            let srcMat = cv.matFromArray(4, 1, cv.CV_32FC2, srcCoords);
+            let dstMat = cv.matFromArray(4, 1, cv.CV_32FC2, dstCoords);
+
+            let M = cv.getPerspectiveTransform(srcMat, dstMat);
+            let dst = new cv.Mat();
+            let dsize = new cv.Size(maxWidth, maxHeight);
+
+            // ៥. អនុវត្តការទាញមុំ
+            cv.warpPerspective(src, dst, M, dsize, cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar());
+
+            // ៦. បង្ហាញលទ្ធផលក្នុង outputCanvas
+            cv.imshow('outputCanvas', dst);
+
+            // សម្អាតអង្គចងចាំ OpenCV
+            src.delete(); dst.delete(); M.delete(); srcMat.delete(); dstMat.delete();
+
+            // កែប្រែ UI ក្រោយកាត់រួច
+            isCropped = true;
+            
+            // តម្រឹម Canvas បង្ហាញឲ្យត្រូវនឹងរូបថ្មី
+            const dispWidth = window.innerWidth - 32;
+            const dispHeight = window.innerHeight * 0.55;
+            const newScale = Math.min(dispWidth / maxWidth, dispHeight / maxHeight);
+            canvas.width = maxWidth * newScale;
+            canvas.height = maxHeight * newScale;
+
+            document.getElementById('doCropBtn').classList.add('hidden');
+            document.getElementById('resetCropBtn').classList.remove('hidden');
+            document.getElementById('instructionText').innerText = "ឯកសារត្រូវបានកាត់រួចរាល់ អ្នកអាចកែពណ៌ស/ខ្មៅបាន។";
+            
+            drawEditor();
+        });
+
+        // ត្រឡប់ទៅកាត់ម្ដងទៀត
+        document.getElementById('resetCropBtn').addEventListener('click', () => {
+            setupCanvasWithImage(); // ហៅរៀបចំសាថ្មី
+        });
+
+        // --- ផ្នែក Filters និង Save ---
+        document.getElementById('filterWhiteboardBtn').addEventListener('click', () => {
+            if(!isCropped) return alert("សូមចុច កាត់រូប ជាមុនសិន!");
+            currentFilter = "grayscale(100%) contrast(150%) brightness(110%)";
+            drawEditor();
+        });
+
+        document.getElementById('filterPhotoBtn').addEventListener('click', () => {
+            if(!isCropped) return alert("សូមចុច កាត់រូប ជាមុនសិន!");
+            currentFilter = "none";
+            drawEditor();
+        });
+
+        // មុខងារ Save រូបភាពទុកក្នុង Frontend List
+        document.getElementById('saveBtn').addEventListener('click', async () => {
+            if(!isCropped) return alert("សូមកាត់រូបឲ្យហើយសិន មុននឹង Save!");
+            
+            // អនុវត្ត Filter ចូលក្នុង Output Canvas ដើម្បី Save ជាកម្រិតច្បាស់
+            const tmpCanvas = document.createElement('canvas');
+            const tmpCtx = tmpCanvas.getContext('2d');
+            tmpCanvas.width = outputCanvas.width;
+            tmpCanvas.height = outputCanvas.height;
+            tmpCtx.filter = currentFilter;
+            tmpCtx.drawImage(outputCanvas, 0, 0);
+
+            // បម្លែងទៅជា JPEG (គុណភាព 80% ដើម្បីកុំឲ្យធ្ងន់ពេកពេល Save ច្រើន)
+            const finalDataUrl = tmpCanvas.toDataURL('image/jpeg', 0.8);
+            
+            savedImages.push(finalDataUrl);
+            await localforage.setItem('scannedDocs', savedImages);
+            updateSavedList();
+            
+            alert('បានរក្សាទុកទំព័រទី ' + savedImages.length + ' ដោយជោគជ័យ!');
+            
+            // លាក់ Workspace
+            document.getElementById('workspace').classList.add('hidden');
+            document.getElementById('placeholder').classList.remove('hidden');
+            document.getElementById('fileInput').value = ""; // Reset Input
         });
 
         // បង្ហាញបញ្ជីរូបភាពក្នុង Sidebar
         function updateSavedList() {
             const listDiv = document.getElementById('savedList');
             listDiv.innerHTML = '';
+            if(savedImages.length === 0) {
+                listDiv.innerHTML = '<p class="text-gray-500 text-center mt-10">មិនទាន់មានឯកសារទេ</p>';
+                return;
+            }
             savedImages.forEach((imgSrc, index) => {
                 listDiv.innerHTML += `
-                    <div class="mb-2 p-2 border rounded flex justify-between items-center bg-gray-50">
-                        <img src="${imgSrc}" class="w-16 h-16 object-cover rounded">
-                        <span class="text-sm font-bold">ទំព័រ ${index + 1}</span>
+                    <div class="mb-3 p-2 border rounded shadow-sm flex justify-between items-center bg-gray-50">
+                        <img src="${imgSrc}" class="w-16 h-16 object-cover rounded border">
+                        <span class="text-sm font-bold text-gray-700">ទំព័រ ${index + 1}</span>
+                        <button onclick="deleteImage(${index})" class="text-red-500 p-2"><i class="fa-solid fa-trash"></i></button>
                     </div>
                 `;
             });
         }
 
-        // មុខងារ Export ជា PDF (បញ្ចូល ១០០សន្លឹក+)
+        // លុបរូបភាព
+        window.deleteImage = async function(index) {
+            if(confirm("តើអ្នកពិតជាចង់លុបទំព័រនេះមែនទេ?")) {
+                savedImages.splice(index, 1);
+                await localforage.setItem('scannedDocs', savedImages);
+                updateSavedList();
+            }
+        };
+
+        // ទាញទិន្នន័យចាស់មកវិញពេលបើក App ម្ដងទៀត
+        async function loadSavedData() {
+            const storedDocs = await localforage.getItem('scannedDocs');
+            if (storedDocs) {
+                savedImages = storedDocs;
+            }
+        }
+
+        // មុខងារ Export ជា PDF
         document.getElementById('exportPdfBtn').addEventListener('click', () => {
             if (savedImages.length === 0) {
                 alert("សូម Save ឯកសារយ៉ាងហោចណាស់ ១ សិន!");
@@ -212,30 +428,29 @@
             }
             
             const { jsPDF } = window.jspdf;
-            const pdf = new jsPDF('p', 'mm', 'a4'); // ទំហំ A4
+            const pdf = new jsPDF('p', 'mm', 'a4');
 
             savedImages.forEach((imgData, index) => {
                 if (index > 0) pdf.addPage();
                 
-                // រៀបចំរូបឲ្យត្រូវនឹងទំហំ A4 (210 x 297 mm)
                 const imgProps = pdf.getImageProperties(imgData);
                 const pdfWidth = pdf.internal.pageSize.getWidth();
                 const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
                 
-                pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+                // បើសិនរូបវែងជាងក្រដាស A4 ឲ្យវាសមល្មមត្រឹម A4
+                const finalHeight = pdfHeight > pdf.internal.pageSize.getHeight() ? pdf.internal.pageSize.getHeight() : pdfHeight;
+                const finalWidth = pdfHeight > pdf.internal.pageSize.getHeight() ? (imgProps.width * finalHeight) / imgProps.height : pdfWidth;
+                
+                // ដាក់កណ្តាល
+                const xOffset = (pdf.internal.pageSize.getWidth() - finalWidth) / 2;
+                const yOffset = (pdf.internal.pageSize.getHeight() - finalHeight) / 2;
+
+                pdf.addImage(imgData, 'JPEG', xOffset, yOffset, finalWidth, finalHeight);
             });
 
-            pdf.save('Scanned_Document.pdf');
+            pdf.save('Document_Scanned.pdf');
         });
 
-        // ទាញទិន្នន័យចាស់មកវិញពេលបើក App ម្ដងទៀត
-        window.onload = async () => {
-            const storedDocs = await localforage.getItem('scannedDocs');
-            if (storedDocs) {
-                savedImages = storedDocs;
-                updateSavedList();
-            }
-        };
     </script>
 </body>
 </html>
