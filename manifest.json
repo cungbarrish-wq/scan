@@ -1,0 +1,16 @@
+{
+  "name": "DocScanner App",
+  "short_name": "DocScanner",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "https://img.freepik.com/premium-vector/scan-documents-icon_268104-3391.jpg?w=360",
+      "sizes": "360x360",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ]
+}
