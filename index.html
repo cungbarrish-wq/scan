@@ -135,6 +135,10 @@
         let scaleRatio = 1; 
         let corners = []; 
         let draggingPoint = null; 
+        let draggingLine = null; // សម្រាប់សម្គាល់ការអូសបន្ទាត់
+        let dragStartPos = null; // ទីតាំងចាប់ផ្តើមអូសបន្ទាត់
+        let dragStartCorners = null; // កែងដើមមុនអូសបន្ទាត់
+        let savedRelativeCorners = []; // រក្សាទុកទីតាំងកែងមុនកាត់រូប (ច្បាស់១០០%)
         let isCropped = false;
         let currentFilter = "none";
         let editingIndex = null; // ចំណាំថាកំពុង Edit ទំព័រទីប៉ុន្មាន
@@ -323,8 +327,8 @@
                 // ១. ប្រសិនបើ Edit គឺទាញយកកែងចាស់ដែលយើងធ្លាប់បាន Save មកវិញ
                 let savedCorners = savedImages[editingIndex].corners;
                 corners = savedCorners.map(c => ({
-                    x: c.x * canvas.width,
-                    y: c.y * canvas.height
+                    x: c.x * (originalImgWidth * scaleRatio),
+                    y: c.y * (originalImgHeight * scaleRatio)
                 }));
                 currentFilter = savedImages[editingIndex].filter || "none";
             } else {
@@ -384,10 +388,12 @@
             ctx.stroke();
 
             // គូរចំណុចទាំង៤
-            ctx.fillStyle = "#ef4444"; // ពណ៌ក្រហម
+            ctx.fillStyle = "rgba(239, 68, 68, 0.4)"; // ពណ៌ក្រហមថ្លា (តម្លាភាព ៤០%) ងាយមើលរូបពីក្រោយ
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.8)"; // ស៊ុមពណ៌ស
+            ctx.lineWidth = 2;
             corners.forEach(p => {
                 ctx.beginPath();
-                ctx.arc(p.x, p.y, 12, 0, Math.PI * 2); // ដាក់រង្វង់ធំបន្តិចងាយចុច
+                ctx.arc(p.x, p.y, 8, 0, Math.PI * 2); // បង្រួមរង្វង់ឲ្យតូចជាងមុន (ត្រឹម 8px)
                 ctx.fill();
                 ctx.stroke();
             });
@@ -428,32 +434,79 @@
             };
         }
 
+        // មុខងារគណនាចម្ងាយពីម្រាមដៃ ទៅបន្ទាត់កែង
+        function getDistanceToLine(p, a, b) {
+            const l2 = Math.pow(a.x - b.x, 2) + Math.pow(a.y - b.y, 2);
+            if (l2 === 0) return Math.hypot(p.x - a.x, p.y - a.y);
+            let t = ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / l2;
+            t = Math.max(0, Math.min(1, t));
+            const proj = { x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y) };
+            return Math.hypot(p.x - proj.x, p.y - proj.y);
+        }
+
         function handleStart(e) {
             if(isCropped) return;
             const pos = getPos(e);
-            // ស្វែងរកចំណុចដែលត្រូវនឹងកន្លែងចុច (រង្វង់ 40px ងាយស្រួលចុចលើទូរស័ព្ទ)
-            draggingPoint = corners.find(p => Math.hypot(p.x - pos.x, p.y - pos.y) < 40);
             
-            if (draggingPoint) {
+            // ១. ស្វែងរកចំណុចដែលត្រូវនឹងកន្លែងចុចមុនគេ (រង្វង់ 40px ងាយស្រួលចុចលើទូរស័ព្ទ)
+            let cornerIdx = corners.findIndex(p => Math.hypot(p.x - pos.x, p.y - pos.y) < 40);
+            
+            if (cornerIdx !== -1) {
+                draggingPoint = cornerIdx;
                 e.preventDefault();
-                updateLoupe(draggingPoint);
+                updateLoupe(corners[draggingPoint]);
+            } else {
+                // ២. បើមិនចំកែងទេ សាកល្បងរកមើលបន្ទាត់ដើម្បីអូសបន្ទាត់
+                let lineIdx = -1;
+                let minDist = 30; // ចម្ងាយ 30px ពីបន្ទាត់
+                for (let i = 0; i < 4; i++) {
+                    let d = getDistanceToLine(pos, corners[i], corners[(i + 1) % 4]);
+                    if (d < minDist) {
+                        minDist = d;
+                        lineIdx = i;
+                    }
+                }
+                if (lineIdx !== -1) {
+                    draggingLine = lineIdx;
+                    dragStartPos = pos;
+                    dragStartCorners = JSON.parse(JSON.stringify(corners));
+                    e.preventDefault();
+                    updateLoupe(pos);
+                }
             }
         }
 
         function handleMove(e) {
-            if (!draggingPoint || isCropped) return;
-            e.preventDefault();
+            if (isCropped) return;
             const pos = getPos(e);
-            // ការពារកុំឲ្យអូសចេញក្រៅ Canvas
-            draggingPoint.x = Math.max(0, Math.min(canvas.width, pos.x));
-            draggingPoint.y = Math.max(0, Math.min(canvas.height, pos.y));
             
-            drawEditor(); // គូររូបធំ
-            updateLoupe(draggingPoint); // គូរកែវពង្រីក
+            if (draggingPoint !== null) {
+                e.preventDefault();
+                corners[draggingPoint].x = Math.max(0, Math.min(canvas.width, pos.x));
+                corners[draggingPoint].y = Math.max(0, Math.min(canvas.height, pos.y));
+                drawEditor(); 
+                updateLoupe(corners[draggingPoint]);
+            } else if (draggingLine !== null) {
+                e.preventDefault();
+                let dx = pos.x - dragStartPos.x;
+                let dy = pos.y - dragStartPos.y;
+                
+                let c1 = draggingLine;
+                let c2 = (draggingLine + 1) % 4;
+                
+                corners[c1].x = Math.max(0, Math.min(canvas.width, dragStartCorners[c1].x + dx));
+                corners[c1].y = Math.max(0, Math.min(canvas.height, dragStartCorners[c1].y + dy));
+                corners[c2].x = Math.max(0, Math.min(canvas.width, dragStartCorners[c2].x + dx));
+                corners[c2].y = Math.max(0, Math.min(canvas.height, dragStartCorners[c2].y + dy));
+                
+                drawEditor();
+                updateLoupe(pos);
+            }
         }
 
         function handleEnd(e) {
             draggingPoint = null;
+            draggingLine = null;
             loupeContainer.classList.add('hidden'); // លាក់កែវពង្រីក
         }
 
@@ -469,6 +522,12 @@
         document.getElementById('doCropBtn').addEventListener('click', () => {
             if(!cvReady) return alert("ប្រព័ន្ធកំពុងរៀបចំ...");
             
+            // រក្សាទុកទីតាំងកែងជាក់លាក់មុនពេល Resize Canvas ដើម្បីពេល Edit ត្រូវកន្លែងចាស់១០០%
+            savedRelativeCorners = corners.map(c => ({
+                x: c.x / (originalImgWidth * scaleRatio),
+                y: c.y / (originalImgHeight * scaleRatio)
+            }));
+
             // ១. ទាញយករូបដើម (High Res) ចូលក្នុង OpenCV
             let src = cv.imread(sourceImage);
             
@@ -546,17 +605,11 @@
             // បម្លែងទៅជា JPEG (គុណភាព 95%)
             const finalDataUrl = tmpCanvas.toDataURL('image/jpeg', 0.95);
             
-            // រក្សាទីតាំងកែងទុក ដើម្បីពេល Edit អាចទាញកែងបានទៀត (ទាញចេញ/ចូល)
-            const relativeCorners = corners.map(c => ({
-                x: c.x / canvas.width,
-                y: c.y / canvas.height
-            }));
-
             const documentObject = {
                 original: sourceImage.src,   // រក្សារូបដើមទាំងស្រុង
                 cropped: finalDataUrl,       // រូបដែលកាត់ហើយ
                 filter: currentFilter,
-                corners: relativeCorners     // ទីតាំងកែងទាំង៤
+                corners: savedRelativeCorners // ទីតាំងកែងទាំង៤ មុន Resize Canvas (រក្សាទុកច្បាស់លាស់)
             };
             
             if (editingIndex !== null) {
