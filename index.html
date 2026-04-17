@@ -29,7 +29,6 @@
         #editorCanvas { touch-action: none; max-width: 100%; max-height: 60vh; } 
     </style>
 </head>
-    <br>
 <body class="bg-gray-100 flex flex-col overflow-hidden">
 
     <!-- Loading Screen សម្រាប់រង់ចាំ OpenCV ដំណើរការ -->
@@ -180,71 +179,113 @@
             loadSavedData();
         }
 
-        // --- ស្វែងរកកែងក្រដាសដោយស្វ័យប្រវត្តិ (Auto Edge Detection) ---
+        // --- ស្វែងរកកែងក្រដាសដោយស្វ័យប្រវត្តិ (Smart AI Edge Detection) ---
         function autoDetectCorners() {
             try {
                 let src = cv.imread(sourceImage);
+                
+                // ១. បង្រួមរូប (Resize) ធ្វើឲ្យ AI ដើរលឿន និងច្បាស់
+                let max_dim = 800;
+                let ratio = 1.0;
+                let resized = new cv.Mat();
+                if (src.cols > max_dim || src.rows > max_dim) {
+                    ratio = max_dim / Math.max(src.cols, src.rows);
+                    cv.resize(src, resized, new cv.Size(0, 0), ratio, ratio, cv.INTER_AREA);
+                } else {
+                    src.copyTo(resized);
+                }
+
                 let gray = new cv.Mat();
-                cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
+                cv.cvtColor(resized, gray, cv.COLOR_RGBA2GRAY, 0);
+                
+                // ២. បំបាត់ Noise
                 cv.GaussianBlur(gray, gray, new cv.Size(5, 5), 0, 0, cv.BORDER_DEFAULT);
+
+                // ៣. ស្វែងរកគែម
                 let edged = new cv.Mat();
-                cv.Canny(gray, edged, 75, 200); // រកគែម
+                cv.Canny(gray, edged, 75, 200);
+
+                // ៤. ភ្ជាប់គែមដែលដាច់ៗចូលគ្នា (Morphological Closing)
+                let kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(5, 5));
+                cv.morphologyEx(edged, edged, cv.MORPH_CLOSE, kernel);
 
                 let contours = new cv.MatVector();
                 let hierarchy = new cv.Mat();
                 cv.findContours(edged, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
 
-                let maxArea = 0;
-                let bestApprox = new cv.Mat();
-
-                // រកកែងចតុកោណដែលធំជាងគេ
+                let cnts = [];
                 for (let i = 0; i < contours.size(); ++i) {
-                    let cnt = contours.get(i);
+                    cnts.push(contours.get(i));
+                }
+                
+                // តម្រៀបរកផ្ទៃដែលធំជាងគេមកមុន
+                cnts.sort((a, b) => cv.contourArea(b) - cv.contourArea(a));
+
+                let bestPts = null;
+                let imgArea = resized.cols * resized.rows;
+
+                // ៥. ស្វែងរករាងចតុកោណក្នុងចំណោម ៥ ផ្ទៃធំៗ
+                for (let i = 0; i < Math.min(cnts.length, 5); i++) {
+                    let cnt = cnts[i];
                     let area = cv.contourArea(cnt);
-                    if (area > 1000) {
-                        let peri = cv.arcLength(cnt, true);
-                        let approx = new cv.Mat();
-                        cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
-                        
-                        if (approx.rows === 4 && area > maxArea) {
-                            maxArea = area;
-                            approx.copyTo(bestApprox);
+                    
+                    if (area < imgArea * 0.05) continue; // បើទំហំតូចពេក (ក្រោម 5%) រំលង
+
+                    let peri = cv.arcLength(cnt, true);
+                    let approx = new cv.Mat();
+                    cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
+                    
+                    // បើរកឃើញកែង ៤ សមស្រប
+                    if (approx.rows === 4) {
+                        bestPts = [];
+                        for(let j=0; j<4; j++) {
+                            bestPts.push({
+                                x: approx.data32S[j*2] / ratio,
+                                y: approx.data32S[j*2+1] / ratio
+                            });
                         }
                         approx.delete();
+                        break;
                     }
-                    cnt.delete();
+                    approx.delete();
                 }
 
-                let foundCorners = null;
-                // ប្រសិនបើរាងនោះជាចតុកោណ ហើយធំជាង 10% នៃរូបភាព
-                if (bestApprox.rows === 4 && maxArea > (src.cols * src.rows * 0.1)) {
-                    let pts = [];
-                    for (let i = 0; i < 4; i++) {
-                        pts.push({
-                            x: bestApprox.data32S[i * 2] * scaleRatio,
-                            y: bestApprox.data32S[i * 2 + 1] * scaleRatio
+                // ៦. AI Fallback: បើក្រដាសកោង រកកែង៤អត់ឃើញ យកប្រអប់ដែលគ្របផ្ទៃធំជាងគេ (MinAreaRect)
+                if (!bestPts && cnts.length > 0 && cv.contourArea(cnts[0]) > imgArea * 0.05) {
+                    let rect = cv.minAreaRect(cnts[0]);
+                    let box = cv.RotatedRect.points(rect);
+                    bestPts = [];
+                    for(let j=0; j<4; j++) {
+                        bestPts.push({
+                            x: box[j].x / ratio,
+                            y: box[j].y / ratio
                         });
                     }
-                    
-                    // តម្រៀបកែង: លើ-ឆ្វេង, លើ-ស្តាំ, ក្រោម-ស្តាំ, ក្រោម-ឆ្វេង
-                    pts.sort((a, b) => (a.x + a.y) - (b.x + b.y)); // តូចជាងគេ = TL, ធំជាងគេ = BR
-                    let tl = pts[0];
-                    let br = pts[3];
-                    let rem = [pts[1], pts[2]];
-                    rem.sort((a, b) => (a.x - a.y) - (b.x - b.y)); // x-y តូច = BL, ធំ = TR
-                    let bl = rem[0];
-                    let tr = rem[1];
-                    
-                    foundCorners = [tl, tr, br, bl];
                 }
 
-                // សម្អាត Memory OpenCV
-                bestApprox.delete();
-                src.delete(); gray.delete(); edged.delete(); contours.delete(); hierarchy.delete();
+                // សម្អាត Memory
+                src.delete(); resized.delete(); gray.delete(); edged.delete(); kernel.delete(); 
+                contours.delete(); hierarchy.delete();
+                cnts.forEach(c => c.delete());
 
-                return foundCorners;
+                // ៧. រៀបចំចំណុចទាំង៤ ត្រឡប់ទៅឲ្យ Canvas វិញ
+                if (bestPts && bestPts.length === 4) {
+                    bestPts = bestPts.map(p => ({ 
+                        x: Math.max(0, p.x * scaleRatio), 
+                        y: Math.max(0, p.y * scaleRatio) 
+                    }));
+                    
+                    // តម្រៀបកែង: លើ-ឆ្វេង, លើ-ស្តាំ, ក្រោម-ស្តាំ, ក្រោម-ឆ្វេង
+                    bestPts.sort((a, b) => a.y - b.y); // តម្រៀបតាម Y មុន
+                    let top = bestPts.slice(0, 2).sort((a, b) => a.x - b.x); // លើ: ឆ្វេងទៅស្តាំ
+                    let bottom = bestPts.slice(2, 4).sort((a, b) => b.x - a.x); // ក្រោម: ស្តាំទៅឆ្វេង
+                    
+                    return [top[0], top[1], bottom[0], bottom[1]];
+                }
+
+                return null;
             } catch (err) {
-                console.error("បញ្ហាក្នុងការ Auto-crop:", err);
+                console.error("AI Auto-crop error:", err);
                 return null;
             }
         }
