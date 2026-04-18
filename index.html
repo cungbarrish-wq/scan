@@ -451,9 +451,14 @@
             const rect = canvas.getBoundingClientRect();
             const clientX = e.touches ? e.touches[0].clientX : e.clientX;
             const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            
+            // ការពារការខុសទីតាំងកូអរដោនេ នៅពេលដែល CSS ធ្វើការ Scale Canvas ខុសពីទំហំ Pixel ពិត
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+
             return {
-                x: clientX - rect.left,
-                y: clientY - rect.top
+                x: (clientX - rect.left) * scaleX,
+                y: (clientY - rect.top) * scaleY
             };
         }
 
@@ -578,6 +583,8 @@
                 rotatedCorners[1],
                 rotatedCorners[2]
             ];
+            
+            savedRelativeCorners = relCorners;
 
             // ៣. អាប់ដេតរូបភាព និងគូរឡើងវិញ
             sourceImage.onload = () => {
@@ -595,10 +602,15 @@
                     x: c.x * canvas.width,
                     y: c.y * canvas.height
                 }));
+                
+                // Update ឯកសារក្នុងបញ្ជី ដើម្បីឲ្យពេល Reset Crop វាមិនលោតទៅកែងចាស់
+                if (editingIndex !== null && savedImages[editingIndex]) {
+                    savedImages[editingIndex].corners = relCorners;
+                    savedImages[editingIndex].original = sourceImage.src;
+                }
 
                 if (isCropped) {
                     // ប្រសិនបើកំពុងមើលផ្ទាំងដែលកាត់ហើយ ធ្វើការកាត់សារជាថ្មីដោយស្វ័យប្រវត្តិ
-                    savedRelativeCorners = relCorners;
                     isCropped = false; 
                     document.getElementById('doCropBtn').click(); 
                 } else {
