@@ -102,12 +102,13 @@
         </div>
         
         <!-- Tools Menu -->
-        <div class="mt-6 grid grid-cols-5 gap-1 sm:gap-2 w-full text-center text-[10px] sm:text-xs font-bold">
+        <div class="mt-6 grid grid-cols-3 gap-2 w-full text-center text-[10px] sm:text-xs font-bold">
             <button id="rotateBtn" class="bg-gray-200 active:bg-gray-300 text-gray-800 p-2 rounded-lg shadow flex flex-col items-center justify-center"><i class="fa-solid fa-rotate-right block text-lg mb-1"></i> បង្វិល</button>
             <button id="doCropBtn" class="bg-blue-500 active:bg-blue-600 text-white p-2 rounded-lg shadow flex flex-col items-center justify-center"><i class="fa-solid fa-crop-simple block text-lg mb-1"></i> កាត់រូប</button>
+            <button id="downloadBtn" class="bg-purple-500 active:bg-purple-600 text-white p-2 rounded-lg shadow flex flex-col items-center justify-center"><i class="fa-solid fa-download block text-lg mb-1"></i> ទាញយក</button>
             <button id="filterWhiteboardBtn" class="bg-gray-200 active:bg-gray-300 text-gray-800 p-2 rounded-lg shadow flex flex-col items-center justify-center"><i class="fa-solid fa-chess-board block text-lg mb-1"></i> ស/ខ្មៅ</button>
             <button id="filterPhotoBtn" class="bg-gray-200 active:bg-gray-300 text-gray-800 p-2 rounded-lg shadow flex flex-col items-center justify-center"><i class="fa-solid fa-image block text-lg mb-1"></i> ពណ៌ដើម</button>
-            <button id="saveBtn" class="bg-green-500 active:bg-green-600 text-white p-2 rounded-lg shadow flex flex-col items-center justify-center"><i class="fa-solid fa-floppy-disk block text-lg mb-1"></i> Save</button>
+            <button id="saveBtn" class="bg-green-500 active:bg-green-600 text-white p-2 rounded-lg shadow flex flex-col items-center justify-center"><i class="fa-solid fa-floppy-disk block text-lg mb-1"></i> រក្សាទុក</button>
         </div>
         
         <button id="resetCropBtn" class="mt-4 text-blue-600 underline text-sm hidden font-bold p-2">ត្រឡប់ទៅកាត់ម្ដងទៀត</button>
@@ -709,24 +710,37 @@
             } else {
                 // Save ឯកសារថ្មី
                 savedImages.push(documentObject);
-                alert('បានរក្សាទុកទំព័រទី ' + savedImages.length + ' ចូលក្នុងទូរស័ព្ទ និងបញ្ជីដោយជោគជ័យ!');
+                alert('បានរក្សាទុកទំព័រទី ' + savedImages.length + ' ចូលក្នុងបញ្ជីដោយជោគជ័យ!'); // លែងលោតថា Save ចូលទូរស័ព្ទទៀតហើយ
             }
             
             await localforage.setItem('scannedDocs', savedImages);
             updateSavedList();
             
-            // --- Save ចូល Device (Gallery/Photos) ---
-            const link = document.createElement('a');
-            link.href = finalDataUrl;
-            link.download = `DocScanner_Page_${Date.now()}.jpg`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            
             // លាក់ Workspace
             document.getElementById('workspace').classList.add('hidden');
             document.getElementById('homeView').classList.remove('hidden');
             document.getElementById('fileInput').value = ""; // Reset Input
+        });
+
+        // មុខងារទាញយករូបភាព (Download) ចូលក្នុងទូរស័ព្ទ
+        document.getElementById('downloadBtn').addEventListener('click', () => {
+            if(!isCropped) return alert("សូមកាត់រូបឲ្យហើយសិន មុននឹងទាញយក!");
+            
+            const tmpCanvas = document.createElement('canvas');
+            const tmpCtx = tmpCanvas.getContext('2d');
+            tmpCanvas.width = outputCanvas.width;
+            tmpCanvas.height = outputCanvas.height;
+            tmpCtx.filter = currentFilter;
+            tmpCtx.drawImage(outputCanvas, 0, 0);
+
+            const finalDataUrl = tmpCanvas.toDataURL('image/jpeg', 0.95);
+            
+            const link = document.createElement('a');
+            link.href = finalDataUrl;
+            link.download = `DocScanner_${Date.now()}.jpg`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         });
 
         // បង្ហាញបញ្ជីរូបភាពក្នុង Sidebar និង Album កណ្តាល
@@ -757,7 +771,10 @@
                     <div class="mb-3 p-2 border rounded shadow-sm flex justify-between items-center bg-gray-50 cursor-pointer hover:bg-blue-100 transition-colors" onclick="editImage(${index})">
                         <img src="${imgSrc}" class="w-16 h-16 object-cover rounded border">
                         <span class="text-sm font-bold text-gray-700 flex-1 ml-3">ទំព័រ ${index + 1}</span>
-                        <button onclick="event.stopPropagation(); deleteImage(${index})" class="text-red-500 p-2 hover:bg-red-200 rounded transition-colors"><i class="fa-solid fa-trash"></i></button>
+                        <div class="flex gap-1">
+                            <button onclick="event.stopPropagation(); downloadSavedImage(${index})" class="text-blue-500 p-2 hover:bg-blue-200 rounded transition-colors"><i class="fa-solid fa-download"></i></button>
+                            <button onclick="event.stopPropagation(); deleteImage(${index})" class="text-red-500 p-2 hover:bg-red-200 rounded transition-colors"><i class="fa-solid fa-trash"></i></button>
+                        </div>
                     </div>
                 `;
                 
@@ -772,7 +789,10 @@
                         </div>
                         <div class="p-2 flex justify-between items-center bg-white">
                             <span class="text-sm font-bold text-gray-700 truncate">ឯកសារទី ${index + 1}</span>
-                            <button onclick="event.stopPropagation(); deleteImage(${index})" class="text-red-500 p-1.5 hover:bg-red-100 rounded transition-colors"><i class="fa-solid fa-trash"></i></button>
+                            <div class="flex gap-1">
+                                <button onclick="event.stopPropagation(); downloadSavedImage(${index})" class="text-blue-500 p-1.5 hover:bg-blue-100 rounded transition-colors"><i class="fa-solid fa-download"></i></button>
+                                <button onclick="event.stopPropagation(); deleteImage(${index})" class="text-red-500 p-1.5 hover:bg-red-100 rounded transition-colors"><i class="fa-solid fa-trash"></i></button>
+                            </div>
                         </div>
                     </div>
                 `;
@@ -807,6 +827,19 @@
                 await localforage.setItem('scannedDocs', savedImages);
                 updateSavedList();
             }
+        };
+
+        // ទាញយករូបភាពពីបញ្ជី (Album) ចូលក្នុងទូរស័ព្ទ
+        window.downloadSavedImage = function(index) {
+            let item = savedImages[index];
+            let imgSrc = typeof item === 'string' ? item : item.cropped;
+            
+            const link = document.createElement('a');
+            link.href = imgSrc;
+            link.download = `DocScanner_Page_${index + 1}_${Date.now()}.jpg`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         };
 
         // ទាញទិន្នន័យចាស់មកវិញ
