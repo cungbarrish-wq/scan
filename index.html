@@ -84,6 +84,17 @@
             </div>
         </div>
 
+        <!-- Preview Workspace (បង្ហាញរូបដែល Crop រួច) -->
+        <div id="previewWorkspace" class="hidden w-full h-full flex flex-col items-center">
+            <div class="flex-1 w-full flex justify-center items-center bg-gray-200 rounded-lg overflow-hidden shadow-inner p-2 relative">
+                <img id="previewImage" src="" class="max-h-full max-w-full object-contain drop-shadow-md">
+            </div>
+            <div class="mt-4 grid grid-cols-2 gap-4 w-full max-w-md text-sm font-bold">
+                <button id="backToHomeBtn" class="bg-gray-500 active:bg-gray-600 text-white p-3 rounded-lg shadow flex justify-center items-center gap-2"><i class="fa-solid fa-arrow-left"></i> ថយក្រោយ</button>
+                <button id="enterEditModeBtn" class="bg-blue-600 active:bg-blue-700 text-white p-3 rounded-lg shadow flex justify-center items-center gap-2"><i class="fa-solid fa-pen-to-square"></i> កែតម្រូវ (Edit)</button>
+            </div>
+        </div>
+
         <div id="workspace" class="hidden w-full max-w-md flex flex-col items-center">
             
             <p id="instructionText" class="text-sm text-gray-600 mb-2 font-bold text-center">អូសចំណុចក្រហមឲ្យចំកែងឯកសារទាំង៤</p>
@@ -111,19 +122,9 @@
             <button id="saveBtn" class="bg-green-500 active:bg-green-600 text-white p-2 rounded-lg shadow flex flex-col items-center justify-center"><i class="fa-solid fa-floppy-disk block text-lg mb-1"></i> រក្សាទុក</button>
         </div>
         
-        <button id="resetCropBtn" class="mt-4 text-blue-600 underline text-sm hidden font-bold p-2">ត្រឡប់ទៅកាត់ម្ដងទៀត</button>
-    </div>
-            </div>
-            
-            <!-- Tools Menu -->
-            <div class="mt-6 grid grid-cols-4 gap-2 w-full text-center text-sm">
-                <button id="doCropBtn" class="bg-blue-500 active:bg-blue-600 text-white p-2 rounded-lg shadow"><i class="fa-solid fa-crop-simple block text-lg mb-1"></i> កាត់រូប</button>
-                <button id="filterWhiteboardBtn" class="bg-gray-200 active:bg-gray-300 text-gray-800 p-2 rounded-lg shadow"><i class="fa-solid fa-chess-board block text-lg mb-1"></i> ស/ខ្មៅ</button>
-                <button id="filterPhotoBtn" class="bg-gray-200 active:bg-gray-300 text-gray-800 p-2 rounded-lg shadow"><i class="fa-solid fa-image block text-lg mb-1"></i> ពណ៌ដើម</button>
-                <button id="saveBtn" class="bg-green-500 active:bg-green-600 text-white p-2 rounded-lg shadow"><i class="fa-solid fa-floppy-disk block text-lg mb-1"></i> Save</button>
-            </div>
-            
-            <button id="resetCropBtn" class="mt-4 text-blue-600 underline text-sm hidden font-bold p-2">ត្រឡប់ទៅកាត់ម្ដងទៀត</button>
+        <div class="mt-4 flex gap-4 w-full justify-center">
+            <button id="resetCropBtn" class="text-blue-600 underline text-sm hidden font-bold p-2">ត្រឡប់ទៅកាត់ម្ដងទៀត</button>
+            <button id="cancelCropBtn" class="text-red-500 underline text-sm font-bold p-2">បោះបង់ការកាត់</button>
         </div>
     </div>
 
@@ -165,6 +166,7 @@
         let isCropped = false;
         let currentFilter = "none";
         let editingIndex = null; // ចំណាំថាកំពុង Edit ទំព័រទីប៉ុន្មាន
+        let viewingIndex = null; // ចំណាំថាកំពុង Preview ទំព័រទីប៉ុន្មាន
 
         // --- ផ្នែករៀបចំ OpenCV ---
         function onOpenCvReady() {
@@ -320,6 +322,7 @@
         // --- ផ្នែករៀបចំ Canvas និង ចំណុចកែង ---
         function setupCanvasWithImage(isEditing = false) {
             document.getElementById('homeView').classList.add('hidden');
+            document.getElementById('previewWorkspace').classList.add('hidden');
             document.getElementById('workspace').classList.remove('hidden');
             document.getElementById('resetCropBtn').classList.add('hidden');
             document.getElementById('doCropBtn').classList.remove('hidden');
@@ -734,6 +737,20 @@
             document.getElementById('fileInput').value = ""; // Reset Input
         });
 
+        // បោះបង់ការកាត់រូប (ត្រឡប់ក្រោយ)
+        document.getElementById('cancelCropBtn').addEventListener('click', () => {
+            document.getElementById('workspace').classList.add('hidden');
+            document.getElementById('fileInput').value = "";
+            if (editingIndex !== null) {
+                // បើកំពុង Edit រូបចាស់ ឲ្យត្រឡប់ទៅផ្ទាំង Preview វិញ
+                viewImage(editingIndex);
+                editingIndex = null;
+            } else {
+                // បើជារូបថ្មី ឲ្យត្រឡប់ទៅ Home
+                document.getElementById('homeView').classList.remove('hidden');
+            }
+        });
+
         // មុខងារទាញយករូបភាព (Download) ចូលក្នុងទូរស័ព្ទ
         document.getElementById('downloadBtn').addEventListener('click', () => {
             if(!isCropped) return alert("សូមកាត់រូបឲ្យហើយសិន មុននឹងទាញយក!");
@@ -780,7 +797,7 @@
                 
                 // ១. បញ្ចូលក្នុង Sidebar
                 listDiv.innerHTML += `
-                    <div class="mb-3 p-2 border rounded shadow-sm flex justify-between items-center bg-gray-50 cursor-pointer hover:bg-blue-100 transition-colors" onclick="editImage(${index})">
+                    <div class="mb-3 p-2 border rounded shadow-sm flex justify-between items-center bg-gray-50 cursor-pointer hover:bg-blue-100 transition-colors" onclick="viewImage(${index})">
                         <img src="${imgSrc}" class="w-16 h-16 object-cover rounded border">
                         <span class="text-sm font-bold text-gray-700 flex-1 ml-3">ទំព័រ ${index + 1}</span>
                         <div class="flex gap-1">
@@ -792,7 +809,7 @@
                 
                 // ២. បញ្ចូលក្នុងផ្ទាំង Album កណ្តាល (Grid View)
                 albumGrid.innerHTML += `
-                    <div class="bg-white rounded-lg shadow-md overflow-hidden flex flex-col relative group cursor-pointer border hover:border-blue-500 transition-all" onclick="editImage(${index})">
+                    <div class="bg-white rounded-lg shadow-md overflow-hidden flex flex-col relative group cursor-pointer border hover:border-blue-500 transition-all" onclick="viewImage(${index})">
                         <div class="h-40 w-full bg-gray-200 relative">
                             <img src="${imgSrc}" class="w-full h-full object-cover">
                             <div class="absolute top-2 left-2 bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded shadow">
@@ -811,19 +828,49 @@
             });
         }
 
-        // មុខងារបើកមើល និង Edit រូបភាព
-        window.editImage = function(index) {
+        // មុខងារមើលរូបភាព (View Mode)
+        window.viewImage = function(index) {
             let item = savedImages[index];
             if (typeof item === 'string') {
-                alert("ទម្រង់ឯកសារជំនាន់ចាស់ មិនអាច Edit បានទេ សូមកាត់ថ្មី។");
+                alert("ទម្រង់ឯកសារជំនាន់ចាស់ មិនអាច មើល ឬ Edit បានទេ សូមកាត់ថ្មី។");
                 return;
             }
 
-            editingIndex = index;
+            viewingIndex = index;
             
-            // បិទ Sidebar
+            // បិទ Sidebar និងលាក់ផ្ទាំង Home/Workspace
             document.getElementById('sidebar').classList.add('sidebar-closed');
             document.getElementById('sidebar').classList.remove('sidebar-open');
+            document.getElementById('homeView').classList.add('hidden');
+            document.getElementById('workspace').classList.add('hidden');
+            
+            // បង្ហាញផ្ទាំង Preview
+            const previewWorkspace = document.getElementById('previewWorkspace');
+            const previewImage = document.getElementById('previewImage');
+            
+            previewImage.src = item.cropped;
+            previewWorkspace.classList.remove('hidden');
+        };
+
+        // មុខងារចេញពី View Mode ទៅ Home វិញ
+        document.getElementById('backToHomeBtn').addEventListener('click', () => {
+            document.getElementById('previewWorkspace').classList.add('hidden');
+            document.getElementById('homeView').classList.remove('hidden');
+            viewingIndex = null;
+        });
+
+        // មុខងារចូលទៅ Edit Mode (ទាញកែងសារជាថ្មី)
+        document.getElementById('enterEditModeBtn').addEventListener('click', () => {
+            if(viewingIndex !== null) {
+                document.getElementById('previewWorkspace').classList.add('hidden');
+                editImage(viewingIndex);
+            }
+        });
+
+        // មុខងាររៀបចំរូបចូលផ្ទាំង Edit
+        window.editImage = function(index) {
+            let item = savedImages[index];
+            editingIndex = index;
             
             // ដាក់រូបដើម (Original) ចូលទៅក្នុងផ្ទាំង Edit វិញ
             sourceImage.onload = () => {
