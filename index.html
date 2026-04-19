@@ -29,13 +29,28 @@
         #editorCanvas { touch-action: none; max-width: 100%; max-height: 60vh; } 
     </style>
 </head>
-<body class="bg-gray-100 flex flex-col overflow-hidden">
+<body class="bg-gray-100 flex flex-col overflow-hidden relative">
 
     <!-- Loading Screen សម្រាប់រង់ចាំ OpenCV ដំណើរការ -->
     <div id="loadingScreen" class="fixed inset-0 bg-white z-[100] flex flex-col items-center justify-center">
         <i class="fa-solid fa-spinner fa-spin text-4xl text-blue-600 mb-4"></i>
         <p class="text-gray-700 font-bold mt-2">កំពុងរៀបចំប្រព័ន្ធកាត់រូប...</p>
         <p class="text-sm text-gray-500">(សូមរង់ចាំបន្តិច)</p>
+    </div>
+
+    <!-- PWA Install Banner -->
+    <div id="pwaInstallBanner" class="hidden fixed bottom-6 left-1/2 transform -translate-x-1/2 w-11/12 max-w-sm bg-white rounded-xl shadow-2xl border border-gray-200 z-[110] p-4 flex flex-col gap-3 transition-all duration-300">
+        <div class="flex items-center gap-3">
+            <img src="https://img.freepik.com/premium-vector/scan-documents-icon_268104-3391.jpg?w=360" alt="App Icon" class="w-12 h-12 rounded-lg object-cover shadow-sm">
+            <div class="flex-1">
+                <h3 class="text-sm font-bold text-gray-800">DocScanner App</h3>
+                <p class="text-[11px] text-gray-500 mt-0.5">ដំឡើងកម្មវិធីនេះទុកក្នុងទូរស័ព្ទ ដើម្បីប្រើប្រាស់ Offline និងលឿនជាងមុន!</p>
+            </div>
+        </div>
+        <div class="flex gap-2">
+            <button id="pwaDismissBtn" class="flex-1 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-bold rounded-lg transition">នៅពេលក្រោយ</button>
+            <button id="pwaInstallBtn" class="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg shadow transition">ដំឡើង (Install)</button>
+        </div>
     </div>
 
     <!-- Navbar (ធានាថាមិនបាត់) -->
@@ -137,6 +152,43 @@
     <script async src="https://docs.opencv.org/4.8.0/opencv.js" onload="onOpenCvReady()" type="text/javascript"></script>
 
     <script>
+        // --- ផ្នែក PWA Install Banner ---
+        let deferredPrompt;
+        const pwaInstallBanner = document.getElementById('pwaInstallBanner');
+        const pwaInstallBtn = document.getElementById('pwaInstallBtn');
+        const pwaDismissBtn = document.getElementById('pwaDismissBtn');
+
+        // ចាប់យក Event ពេល Browser អាចដំឡើង PWA បាន
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            // បង្ហាញ Banner
+            pwaInstallBanner.classList.remove('hidden');
+        });
+
+        // ពេលចុចប៊ូតុង ដំឡើង
+        pwaInstallBtn.addEventListener('click', async () => {
+            pwaInstallBanner.classList.add('hidden');
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                const { outcome } = await deferredPrompt.userChoice;
+                console.log(`User response: ${outcome}`);
+                deferredPrompt = null;
+            }
+        });
+
+        // ពេលចុចប៊ូតុង បដិសេធ (នៅពេលក្រោយ)
+        pwaDismissBtn.addEventListener('click', () => {
+            pwaInstallBanner.classList.add('hidden');
+        });
+
+        // ពេលដំឡើងបានជោគជ័យ
+        window.addEventListener('appinstalled', () => {
+            pwaInstallBanner.classList.add('hidden');
+            deferredPrompt = null;
+            console.log('PWA installed successfully');
+        });
+
         // អថេរសម្រាប់គ្រប់គ្រង UI និង Canvas
         const canvas = document.getElementById('editorCanvas');
         const ctx = canvas.getContext('2d');
