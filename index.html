@@ -90,6 +90,10 @@
             <!-- បញ្ជីរូបភាពដែលបាន Save -->
         </div>
         <div class="p-4 border-t shrink-0">
+            <!-- ប៊ូតុងដំឡើង App ក្នុង Sidebar ជាជម្រើសទី២ -->
+            <button id="sidebarInstallBtn" class="hidden w-full mb-2 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg shadow flex justify-center items-center gap-2 font-bold transition">
+                <i class="fa-solid fa-download"></i> ដំឡើង App (Install)
+            </button>
             <button id="exportPdfBtn" class="w-full bg-red-500 hover:bg-red-600 text-white py-3 rounded-lg shadow flex justify-center items-center gap-2 font-bold transition">
                 <i class="fa-solid fa-file-pdf"></i> បង្កើតជា PDF
             </button>
@@ -166,30 +170,69 @@
     <script async src="https://docs.opencv.org/4.8.0/opencv.js" onload="onOpenCvReady()" type="text/javascript"></script>
 
     <script>
+        // --- ផ្នែកចុះឈ្មោះ Service Worker (ចាំបាច់បំផុតសម្រាប់ PWA) ---
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js').then(reg => {
+                    console.log('Service Worker ដំណើរការជោគជ័យ!', reg.scope);
+                }).catch(err => {
+                    console.warn('Service Worker បរាជ័យ:', err);
+                });
+            });
+        }
+
         // --- ផ្នែក PWA Install Banner ---
         let deferredPrompt;
         const pwaInstallBanner = document.getElementById('pwaInstallBanner');
         const pwaInstallBtn = document.getElementById('pwaInstallBtn');
         const pwaDismissBtn = document.getElementById('pwaDismissBtn');
+        const sidebarInstallBtn = document.getElementById('sidebarInstallBtn');
 
-        // ចាប់យក Event ពេល Browser អាចដំឡើង PWA បាន
+        // ពិនិត្យមើលថាតើកំពុងប្រើលើ iOS (iPhone/iPad) ដែរឬទេ?
+        const isIos = () => {
+          const userAgent = window.navigator.userAgent.toLowerCase();
+          return /iphone|ipad|ipod/.test( userAgent );
+        }
+        
+        // ពិនិត្យមើលថា App នេះបានដំឡើងរួចហើយឬនៅ?
+        const isInStandaloneMode = () => ('standalone' in window.navigator) && (window.navigator.standalone);
+
+        // សម្រាប់ iOS គឺវាមិនលោត prompt ដោយស្វ័យប្រវត្តិទេ ដូច្នេះយើងត្រូវបង្ហាញសារប្រាប់ឲ្យគាត់ធ្វើដោយដៃ
+        if (isIos() && !isInStandaloneMode()) {
+            pwaInstallBanner.classList.remove('hidden');
+            pwaInstallBtn.innerHTML = '<i class="fa-solid fa-share-nodes"></i> ចុច Share រួចយក Add to Home Screen';
+            pwaInstallBtn.onclick = () => pwaInstallBanner.classList.add('hidden'); 
+        }
+
+        // ចាប់យក Event ពេល Browser (Android/PC) អនុញ្ញាតឲ្យដំឡើង PWA បាន
         window.addEventListener('beforeinstallprompt', (e) => {
             e.preventDefault();
             deferredPrompt = e;
-            // បង្ហាញ Banner
+            // បង្ហាញ Banner ខាងក្រោម និងប៊ូតុងក្នុង Sidebar
             pwaInstallBanner.classList.remove('hidden');
+            if(sidebarInstallBtn) sidebarInstallBtn.classList.remove('hidden');
         });
 
-        // ពេលចុចប៊ូតុង ដំឡើង
+        // ពេលចុចប៊ូតុង ដំឡើង (ពី Banner)
         pwaInstallBtn.addEventListener('click', async () => {
+            if (!deferredPrompt) return;
             pwaInstallBanner.classList.add('hidden');
-            if (deferredPrompt) {
+            deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
+            console.log(`User response: ${outcome}`);
+            deferredPrompt = null;
+        });
+
+        // ពេលចុចប៊ូតុង ដំឡើង (ពី Sidebar)
+        if(sidebarInstallBtn) {
+            sidebarInstallBtn.addEventListener('click', async () => {
+                if (!deferredPrompt) return;
                 deferredPrompt.prompt();
                 const { outcome } = await deferredPrompt.userChoice;
-                console.log(`User response: ${outcome}`);
                 deferredPrompt = null;
-            }
-        });
+                sidebarInstallBtn.classList.add('hidden');
+            });
+        }
 
         // ពេលចុចប៊ូតុង បដិសេធ (នៅពេលក្រោយ)
         pwaDismissBtn.addEventListener('click', () => {
@@ -199,6 +242,7 @@
         // ពេលដំឡើងបានជោគជ័យ
         window.addEventListener('appinstalled', () => {
             pwaInstallBanner.classList.add('hidden');
+            if(sidebarInstallBtn) sidebarInstallBtn.classList.add('hidden');
             deferredPrompt = null;
             console.log('PWA installed successfully');
         });
